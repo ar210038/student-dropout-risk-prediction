@@ -1,148 +1,90 @@
-# Early Student Dropout Risk Prediction Using Machine Learning
+# Machine Learning-Based Student Profiling and Dropout Risk Factor Analysis among Bangladeshi University Students
 
-This university project estimates the probability that a newly enrolled student may later drop out. It is intended as an early-support prototype, not an automated decision system.
+This university project combines unsupervised student profiling with exploratory analysis of self-reported dropout consideration. It does **not** predict whether an individual student will drop out.
 
-The Streamlit website accepts the 24 demographic, application, financial, and contextual fields available at enrollment. It loads a previously fitted scikit-learn pipeline, reports the dropout probability, applies the saved 0.40 decision threshold, and presents a careful per-student model explanation.
+## Dataset and cleaning
 
-## Dataset
+The active **Student Dropout Risk Survey Dataset** covers Bangladesh university students. It contains academic, socioeconomic, and lifestyle responses plus a 1–5 question about considering dropout because of academic stress.
 
-The active dataset is [UCI Predict Students' Dropout and Academic Success](https://archive.ics.uci.edu/dataset/697/predict+students+dropout+and+academic+success), DOI [`10.24432/C5MC89`](https://doi.org/10.24432/C5MC89), licensed under CC BY 4.0.
+- Raw responses: 368
+- Duplicate copies removed: 17
+- Cleaned sample: 351 unique responses
+- Duplicate groups: 16 near-immediate repeated submissions and 3 repeated submissions
+- No respondent information is displayed
 
-- Original dataset: 4,424 students, 36 predictors, and one target
-- Original outcomes: 2,209 Graduate, 1,421 Dropout, and 794 Enrolled
-- Modeling cohort: 3,630 students with resolved outcomes
-- Binary target: `Dropout = 1`, `Graduate = 0`
-- Prediction point: enrollment, before first-semester teaching
+## K-Means methodology
 
-Students whose outcome is still `Enrolled` are excluded from modeling. First- and second-semester academic variables are also excluded so that every predictor is available at the stated prediction point.
+The saved scikit-learn pipeline applies one-hot encoding to nominal variables, defensible ordinal encoding to ordered variables, scaling where appropriate, and K-Means clustering. The target response, Timestamp, derived risk classes, and academic-overwhelm frequency were excluded from clustering.
 
-## Final model
+The 12 inputs are age group, academic level, personal income, employment type, internet quality, living arrangement, study routine, family income, scholarship/stipend, study-space quality, academic-resource access, and current GPA.
 
-The selected model is a class-weighted Logistic Regression pipeline with one-hot encoding for categorical fields and standardization for numerical fields. Model selection and threshold selection use only training-set cross-validation and out-of-fold predictions. The saved pipeline contains preprocessing and the fitted classifier together.
+Values of k from 2 through 5 were evaluated using silhouette score, Davies–Bouldin index, cluster sizes, interpretability, and stability across random seeds.
 
-Held-out test performance at the saved 0.40 threshold:
-
-| Metric | Result |
+| Result | Value |
 |---|---:|
-| Accuracy | 73.55% |
-| Precision | 62.04% |
-| Recall | 83.45% |
-| F1-score | 71.17% |
-| ROC-AUC | 85.48% |
+| Profile 1 size | 213 (60.7%) |
+| Profile 2 size | 138 (39.3%) |
+| Silhouette score | 0.1335 |
+| Davies–Bouldin score | 2.2859 |
+| Mean pairwise ARI | 0.9894 |
+| Minimum ARI | 0.9772 |
 
-The confusion matrix contains 237 correctly detected dropouts, 47 missed dropouts, 145 false dropout warnings, and 297 correctly identified graduates. Recall is prioritized because the intended use is to identify students who may benefit from supportive review.
+The profiles are highly reproducible but weakly separated geometrically:
 
-## Technology stack
+- **Profile 1 — Early-Stage, Mostly Non-Working Students**
+- **Profile 2 — Advanced-Stage, Working Students**
 
-- Python
-- Pandas and NumPy
-- scikit-learn
-- Matplotlib
-- Streamlit
-- pytest
+## Exploratory factor analysis
 
-## Project structure
+Elevated dropout consideration is descriptively defined as responses 4–5; responses 1–3 are Not Elevated. The cleaned sample contains 77 Elevated responses (21.9%) and 274 Not Elevated responses (78.1%). This grouping is not an ML training label.
 
-```text
-cse-dropout-prediction/
-├── .streamlit/
-├── data/
-├── models/
-├── notebooks/
-├── reports/
-├── src/
-├── tests/
-├── app.py
-├── requirements.txt
-├── README.md
-└── .gitignore
-```
+Among the stronger associations observed were study-material satisfaction (Cramér’s V 0.185), scholarship/stipend (0.171), study-space quality (0.170), employment type (0.169), prior residence (0.167), and sleep duration (0.153). These are small exploratory associations and do not establish causation.
 
-Important files:
+Profile 1 contained 20.7% Elevated responses and Profile 2 contained 23.9%. The difference was not statistically significant: χ²(1)=0.346, p=0.557, Cramér’s V=0.038. Profile membership is not a risk category.
 
-- `data/student_dropout.csv` — active UCI dataset
-- `src/inspect_dataset.py` — dataset inspection and leakage-oriented checks
-- `src/train_model.py` — reproducible offline training and evaluation
-- `models/dropout_model.joblib` — fitted preprocessing-and-classifier pipeline
-- `models/model_metadata.json` — input schema, threshold, and metrics
-- `reports/dataset_analysis.md` — dataset and leakage analysis
-- `reports/model_evaluation.md` — model evaluation details
-- `reports/fairness_analysis.md` — subgroup diagnostics and limitations
-- `reports/local_validation_plan.md` — plan for a future Bangladeshi external-validation study
-- `.streamlit/config.toml` — minimal light-theme configuration; contains no secrets
-- `app.py` — four-page Streamlit interface; inference only
+## Website functionality
 
-## Installation
+The Streamlit website provides four pages:
 
-**Recommended deployment version: Python 3.12.** Streamlit Community Cloud currently defaults to Python 3.12, and every direct dependency in this project declares Python 3.12 support. The current local machine has only Python 3.14.5 installed, so the completed test run described below used 3.14.5 rather than pretending that 3.12 was tested locally.
+1. Home
+2. Student Profile Explorer
+3. Dropout Risk Factor Analysis
+4. Methodology & Dataset
 
-The scikit-learn version is fixed at 1.9.1 because the saved model artifact was created with that version. From the project directory, create and activate a virtual environment if desired, then install the requirements:
+The explorer loads the saved profiler with Streamlit resource caching, accepts the exact 12 inputs, and assigns the nearest descriptive profile. It never retrains in the application and never reports an individual forecast.
+
+## Key files
+
+- `app.py` — active four-page interface
+- `models/bangladesh_student_profiler.joblib` — preprocessing and K-Means pipeline
+- `models/bangladesh_student_profiler_metadata.json` — schema and analysis metadata
+- `reports/bangladesh_risk/profile_definitions.json` — profile descriptions
+- `reports/bangladesh_risk/figures/cluster_pca.png` — verified PCA view
+- `reports/bangladesh_risk/clustering_analysis.md` — clustering report
+- `reports/bangladesh_risk/factor_analysis.md` — association report
+- `archive/uci-portugal-version-2026-09-20/` — recoverable historical implementation
+
+## Requirements and local use
+
+Python 3.12 is recommended. The active application requires Streamlit, pandas, NumPy, scikit-learn, joblib, and Matplotlib. Other retained dependencies support archived research scripts.
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-## Inspect the dataset
-
-```bash
-python src/inspect_dataset.py
-```
-
-## Train and save the model
-
-The repository includes the validated artifacts. To reproduce them locally:
-
-```bash
-python src/train_model.py
-```
-
-Training is an offline step. The Streamlit application never fits or retrains a model.
-
-## Run the website
-
-```bash
+python -m pytest -q
 python -m streamlit run app.py
 ```
 
-Use the sidebar to open Home, Predict Dropout Risk, Model Performance, and About Dataset.
+The application uses repository-relative paths and needs no secret or external service.
 
-## Deployment
+## Limitations
 
-The project is prepared for [Streamlit Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy). It uses repository-relative `pathlib` paths and needs no database, external service, environment variable, or secret.
+- Small, self-reported, cross-sectional sample
+- Survey-selection bias may exist
+- Not nationally representative
+- No confirmed future dropout outcome
+- Profiles depend on selected variables and preprocessing
+- Weak silhouette separation
+- Profile membership was not significantly associated with dropout consideration
+- Factor associations are exploratory; association does not imply causation
 
-1. Create a GitHub repository and push the complete project, including the saved model, metadata, figures, requirements, and Streamlit configuration.
-2. Sign in to Streamlit Community Cloud with GitHub.
-3. Select **Create app**.
-4. Choose the GitHub repository and branch.
-5. Set the entrypoint file to `app.py`.
-6. Open **Advanced settings** and select **Python 3.12**.
-7. Leave the secrets field empty; this project requires no secrets.
-8. Deploy the app.
-9. After deployment, verify all four pages, confirm that all three evaluation figures appear, and submit one sample prediction.
-
-Before pushing, confirm that these deployment-critical files are committed:
-
-```text
-app.py
-requirements.txt
-.streamlit/config.toml
-models/dropout_model.joblib
-models/model_metadata.json
-reports/figures/confusion_matrix.png
-reports/figures/roc_curve.png
-reports/figures/feature_importance.png
-```
-
-`.streamlit/secrets.toml` is intentionally excluded by `.gitignore` and must never be committed if secrets are added in the future.
-
-## Run tests
-
-```bash
-python -m pytest -q
-```
-
-## Responsible-use limitations
-
-The data comes from one Portuguese higher-education institution, covers multiple degree programs, and does not include exact dropout dates. Results may not transfer to Bangladesh or another university without local validation. Demographic and socioeconomic fields can introduce fairness concerns. Predictions are statistical associations—not causal findings—and must not be the sole basis for academic, financial, disciplinary, or admission decisions.
-
-See [`reports/local_validation_plan.md`](reports/local_validation_plan.md) for a realistic external-validation protocol covering local feature mapping, frozen-model evaluation, calibration, fairness, privacy, and governance. The plan does not fabricate local data or results.
+Approved claim: “This system uses unsupervised machine learning to identify common student profiles from academic, socioeconomic and lifestyle characteristics and examines how those profiles relate to self-reported dropout consideration.”
