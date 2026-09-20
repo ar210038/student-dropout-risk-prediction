@@ -1,90 +1,90 @@
-# Machine Learning-Based Student Profiling and Dropout Risk Factor Analysis among Bangladeshi University Students
+# Student Dropout Early Warning System Using Machine Learning
 
-This university project combines unsupervised student profiling with exploratory analysis of self-reported dropout consideration. It does **not** predict whether an individual student will drop out.
+This academic project estimates elevated risk of later university dropout after a student completes Semester 1. It supports timely review—not automatic decisions or certainty about a student's future.
 
-## Dataset and cleaning
+## Prediction point and target
 
-The active **Student Dropout Risk Survey Dataset** covers Bangladesh university students. It contains academic, socioeconomic, and lifestyle responses plus a 1–5 question about considering dropout because of academic stress.
+The prediction point is the **end of the first semester**. The model uses background, financial, and Semester-1 performance information available then.
 
-- Raw responses: 368
-- Duplicate copies removed: 17
-- Cleaned sample: 351 unique responses
-- Duplicate groups: 16 near-immediate repeated submissions and 3 repeated submissions
-- No respondent information is displayed
+- Positive class: Dropout = 1
+- Negative class: Graduate = 0
+- Enrolled students are excluded because their final outcomes are unresolved
+- All Semester-2 and final-outcome information is excluded
 
-## K-Means methodology
+## Dataset
 
-The saved scikit-learn pipeline applies one-hot encoding to nominal variables, defensible ordinal encoding to ordered variables, scaling where appropriate, and K-Means clustering. The target response, Timestamp, derived risk classes, and academic-overwhelm frequency were excluded from clustering.
+The project uses the UCI Machine Learning Repository dataset **Predict Students' Dropout and Academic Success**.
 
-The 12 inputs are age group, academic level, personal income, employment type, internet quality, living arrangement, study routine, family income, scholarship/stipend, study-space quality, academic-resource access, and current GPA.
-
-Values of k from 2 through 5 were evaluated using silhouette score, Davies–Bouldin index, cluster sizes, interpretability, and stability across random seeds.
-
-| Result | Value |
+| Cohort | Students |
 |---|---:|
-| Profile 1 size | 213 (60.7%) |
-| Profile 2 size | 138 (39.3%) |
-| Silhouette score | 0.1335 |
-| Davies–Bouldin score | 2.2859 |
-| Mean pairwise ARI | 0.9894 |
-| Minimum ARI | 0.9772 |
+| Original dataset | 4,424 |
+| Graduate | 2,209 |
+| Dropout | 1,421 |
+| Enrolled excluded | 794 |
+| Resolved modeling cohort | 3,630 |
 
-The profiles are highly reproducible but weakly separated geometrically:
+Dropout prevalence is 39.15%.
 
-- **Profile 1 — Early-Stage, Mostly Non-Working Students**
-- **Profile 2 — Advanced-Stage, Working Students**
+## Final 12-input form
 
-## Exploratory factor analysis
+1. Age at Enrollment
+2. Previous Academic Grade
+3. Admission Grade
+4. Mother's Occupation
+5. Father's Occupation
+6. Scholarship Holder
+7. Debtor
+8. Tuition Fees Up to Date
+9. Courses Enrolled
+10. Evaluations Completed
+11. Courses Passed
+12. Average Semester Grade
 
-Elevated dropout consideration is descriptively defined as responses 4–5; responses 1–3 are Not Elevated. The cleaned sample contains 77 Elevated responses (21.9%) and 274 Not Elevated responses (78.1%). This grouping is not an ML training label.
+Occupation codes are presented as documented readable labels. Semester pass rate is calculated inside the pipeline as `Courses Passed / Courses Enrolled`; zero enrolled courses produces a rate of zero.
 
-Among the stronger associations observed were study-material satisfaction (Cramér’s V 0.185), scholarship/stipend (0.171), study-space quality (0.170), employment type (0.169), prior residence (0.167), and sleep duration (0.153). These are small exploratory associations and do not establish causation.
+## Model development and results
 
-Profile 1 contained 20.7% Elevated responses and Profile 2 contained 23.9%. The difference was not statistically significant: χ²(1)=0.346, p=0.557, Cramér’s V=0.038. Profile membership is not a risk category.
+Preprocessing and feature engineering are contained in a scikit-learn pipeline. Logistic Regression, Random Forest, and XGBoost were compared with repeated stratified cross-validation on training data. The holdout was not used for feature or threshold selection.
 
-## Website functionality
+The selected model is **Random Forest**, with a locked threshold of **0.48**.
 
-The Streamlit website provides four pages:
+| Held-out metric | Result |
+|---|---:|
+| Accuracy | 88.3% |
+| Balanced accuracy | 88.1% |
+| Precision | 83.5% |
+| Recall | 87.3% |
+| F1 | 85.4% |
+| ROC-AUC | 93.9% |
+| PR-AUC | 93.0% |
+| Brier score | 0.0967 |
 
-1. Home
-2. Student Profile Explorer
-3. Dropout Risk Factor Analysis
-4. Methodology & Dataset
+Confusion matrix: 393 correctly identified graduates, 49 false early warnings, 36 missed dropout cases, and 248 correctly identified dropout cases.
 
-The explorer loads the saved profiler with Streamlit resource caching, accepts the exact 12 inputs, and assigns the nearest descriptive profile. It never retrains in the application and never reports an individual forecast.
+## Streamlit interface
 
-## Key files
+The four pages are Home, Assess Dropout Risk, Model Performance, and About & Methodology. The assessment page loads the frozen artifact from `models/uci_sem1/`, calls `predict_proba()`, reads the Dropout=1 probability, and applies the saved threshold. It never retrains.
 
-- `app.py` — active four-page interface
-- `models/bangladesh_student_profiler.joblib` — preprocessing and K-Means pipeline
-- `models/bangladesh_student_profiler_metadata.json` — schema and analysis metadata
-- `reports/bangladesh_risk/profile_definitions.json` — profile descriptions
-- `reports/bangladesh_risk/figures/cluster_pca.png` — verified PCA view
-- `reports/bangladesh_risk/clustering_analysis.md` — clustering report
-- `reports/bangladesh_risk/factor_analysis.md` — association report
-- `archive/uci-portugal-version-2026-09-20/` — recoverable historical implementation
+## Leakage controls
 
-## Requirements and local use
+The final model excludes Target, every Semester-2 variable, final-outcome information, Application Mode, Application Order, Course code, Nationality, unemployment, inflation, and GDP. No information occurring after the prediction point is used.
 
-Python 3.12 is recommended. The active application requires Streamlit, pandas, NumPy, scikit-learn, joblib, and Matplotlib. Other retained dependencies support archived research scripts.
+## Local use
+
+Python 3.12 is the deployment target. The artifact was trained under Python 3.14.5 with scikit-learn 1.9.1; Python 3.12 must be tested independently before deployment.
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pytest -q
+python -m pytest -q --basetemp=.pytest_tmp
 python -m streamlit run app.py
 ```
 
-The application uses repository-relative paths and needs no secret or external service.
-
 ## Limitations
 
-- Small, self-reported, cross-sectional sample
-- Survey-selection bias may exist
-- Not nationally representative
-- No confirmed future dropout outcome
-- Profiles depend on selected variables and preprocessing
-- Weak silhouette separation
-- Profile membership was not significantly associated with dropout consideration
-- Factor associations are exploratory; association does not imply causation
-
-Approved claim: “This system uses unsupervised machine learning to identify common student profiles from academic, socioeconomic and lifestyle characteristics and examines how those profiles relate to self-reported dropout consideration.”
+- Data comes from Portuguese higher education and has not been validated in Bangladesh.
+- Academic systems may differ between countries.
+- Occupation categories originate from the source dataset.
+- Probability calibration may require local recalibration.
+- Predictions are estimates, not certainties.
+- Outputs should support, not replace, human judgement.
+- Operational deployment requires local longitudinal validation or retraining.

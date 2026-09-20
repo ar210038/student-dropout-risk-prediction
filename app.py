@@ -1,4 +1,4 @@
-"""Streamlit interface for Bangladesh student profiling and factor analysis."""
+"""Semester-1 student dropout early-warning Streamlit application."""
 from __future__ import annotations
 import json
 from pathlib import Path
@@ -8,142 +8,109 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-ROOT = Path(__file__).resolve().parent
-MODEL_PATH = ROOT / "models" / "bangladesh_student_profiler.joblib"
-METADATA_PATH = ROOT / "models" / "bangladesh_student_profiler_metadata.json"
-PROFILE_PATH = ROOT / "reports" / "bangladesh_risk" / "profile_definitions.json"
-PCA_PATH = ROOT / "reports" / "bangladesh_risk" / "figures" / "cluster_pca.png"
-PROFILE_FEATURES = ["age_group", "academic_level", "personal_income", "employment_type", "internet_quality", "living_arrangement", "study_routine", "family_income", "scholarship", "study_space_quality", "academic_resource_access", "current_gpa"]
-INPUT_OPTIONS: dict[str, list[Any]] = {
-    "age_group": ["17–20", "21–23", "24+"],
-    "academic_level": ["Undergraduate (Year 1)", "Undergraduate (Year 2–4)", "Masters"],
-    "personal_income": ["No personal income", "<5,000 BDT", "5,000–10,000 BDT", ">10,000 BDT"],
-    "employment_type": ["No", "Yes, Tuition/Coaching", "Yes, Freelancing (e.g., online work)", "Yes, Part-time/Full-time Job"],
-    "internet_quality": [1, 2, 3, 4, 5],
-    "living_arrangement": ["Home or Hostels", "University Residence (Halls)"],
-    "study_routine": ["Only before exams", "Sporadically (no fixed schedule)", "Regularly throughout the course (e.g., weekly)"],
-    "family_income": ["<20,000", "20,000–50,000", "50,001–100,000", ">100,000"],
-    "scholarship": ["No", "Yes, Government Scholarship", "Yes, University Merit-Based", "Yes, Private/Donor-Funded"],
-    "study_space_quality": ["No dedicated study space", "Yes - Very noisy (1)", "Yes - Noisy (2)", "Yes - Moderate noise (3)", "Yes - Quiet (4)", "Yes - Very quiet (5)"],
-    "academic_resource_access": ["No access", "Yes, Rarely", "Yes, Weekly", "Yes, Daily"],
-    "current_gpa": ["<2.5", "2.5–3.0", "3.1–3.5", ">3.5"],
-}
-INPUT_LABELS = {"age_group": "Age Group", "academic_level": "Academic Level", "personal_income": "Personal Income", "employment_type": "Employment / Tuition Work", "internet_quality": "Internet Quality", "living_arrangement": "Living Arrangement", "study_routine": "Study Routine", "family_income": "Monthly Family Income (BDT)", "scholarship": "Scholarship / Stipend", "study_space_quality": "Study-Space Quality", "academic_resource_access": "Academic-Resource Access", "current_gpa": "Current GPA"}
-PROFILE_NAMES = {0: "Profile 1 — Early-Stage, Mostly Non-Working Students", 1: "Profile 2 — Advanced-Stage, Working Students"}
-FACTOR_ASSOCIATIONS = pd.DataFrame({"Factor": ["Study-material satisfaction", "Scholarship / stipend", "Study-space quality", "Employment type", "Prior residence", "Sleep duration"], "Cramér’s V": [0.185, 0.171, 0.170, 0.169, 0.167, 0.153]})
+ROOT=Path(__file__).resolve().parent
+MODEL_PATH=ROOT/'models'/'uci_sem1'/'dropout_early_warning_model.joblib'
+METADATA_PATH=ROOT/'models'/'uci_sem1'/'model_metadata.json'
+RESULTS_PATH=ROOT/'reports'/'uci_sem1'/'training_results.json'
+CM_PATH=ROOT/'reports'/'uci_sem1'/'figures'/'confusion_matrix.png'
+CALIBRATION_PATH=ROOT/'reports'/'uci_sem1'/'figures'/'calibration_curve.png'
+THRESHOLD=0.48
+FORM_FIELDS=['Age at enrollment','Previous qualification (grade)','Admission grade',"Mother's occupation","Father's occupation",'Scholarship holder','Debtor','Tuition fees up to date','Curricular units 1st sem (enrolled)','Curricular units 1st sem (evaluations)','Curricular units 1st sem (approved)','Curricular units 1st sem (grade)']
+OCCUPATIONS={
+0:'Student',1:'Legislative/executive representatives, directors and managers',2:'Intellectual and scientific specialists',3:'Intermediate-level technicians and professions',4:'Administrative staff',5:'Personal services, security and sales workers',6:'Skilled agriculture, fisheries and forestry workers',7:'Skilled industry, construction and craft workers',8:'Machine operators and assembly workers',9:'Unskilled workers',10:'Armed Forces',90:'Other situation',99:'Unspecified',101:'Armed Forces officers',102:'Armed Forces sergeants',103:'Other Armed Forces personnel',112:'Administrative and commercial services directors',114:'Hotel, catering, trade and other service directors',121:'Physical sciences, mathematics and engineering specialists',122:'Health professionals',123:'Teachers',124:'Finance, administration and commercial specialists',125:'Information and communication technology specialists',131:'Intermediate science and engineering technicians',132:'Intermediate health technicians',134:'Intermediate legal, social, cultural and sports services',135:'Information and communication technology technicians',141:'Office, secretarial and data-processing workers',143:'Data, accounting, statistics and financial operators',144:'Other administrative support staff',151:'Personal service workers',152:'Sellers',153:'Personal care workers',154:'Protection and security personnel',161:'Market-oriented farmers and skilled agricultural workers',163:'Subsistence farmers, fishers, hunters and gatherers',171:'Skilled construction workers (except electricians)',172:'Skilled metallurgy and metalworking workers',173:'Printing, precision, jewellery and craft workers',174:'Skilled electrical and electronics workers',175:'Food, wood, clothing and other craft workers',181:'Fixed-plant and machine operators',182:'Assembly workers',183:'Vehicle drivers and mobile-equipment operators',191:'Cleaning workers',192:'Unskilled agriculture, fisheries and forestry workers',193:'Unskilled extractive, construction, manufacturing and transport workers',194:'Meal preparation assistants',195:'Street vendors and service providers'}
+OCCUPATION_BY_LABEL={label:code for code,label in OCCUPATIONS.items()}
+FEATURE_IMPORTANCE=pd.DataFrame({'Feature':['Courses Passed','Courses Enrolled / Pass Rate','Tuition Fees Up to Date','Average Semester Grade','Scholarship','Evaluations Completed','Age','Father’s Occupation','Mother’s Occupation','Admission Grade','Previous Academic Grade','Debtor Status'],'Association':[.1477,.0358,.0281,.0219,.0176,.0092,.0088,.0086,.0083,.0077,.0075,.0070]})
 
 @st.cache_resource
-def load_profiler() -> Any:
-    return joblib.load(MODEL_PATH)
-
+def load_model_artifact()->dict[str,Any]: return joblib.load(MODEL_PATH)
 @st.cache_data
-def load_project_data() -> tuple[dict, list[dict]]:
-    return (json.loads(METADATA_PATH.read_text(encoding="utf-8")), json.loads(PROFILE_PATH.read_text(encoding="utf-8")))
+def load_metadata()->tuple[dict,dict]: return json.loads(METADATA_PATH.read_text(encoding='utf-8')),json.loads(RESULTS_PATH.read_text(encoding='utf-8'))
 
-def make_profile_input(values: dict[str, Any]) -> pd.DataFrame:
-    if set(values) != set(PROFILE_FEATURES):
-        raise ValueError("Profile answers do not match the required 12-input schema.")
-    return pd.DataFrame([{feature: values[feature] for feature in PROFILE_FEATURES}])
+def make_input_frame(values:dict[str,Any])->pd.DataFrame:
+    if set(values)!=set(FORM_FIELDS): raise ValueError('Answers do not match the required 12-field form.')
+    return pd.DataFrame([{field:values[field] for field in FORM_FIELDS}])
 
-def assign_profile(profiler: Any, values: dict[str, Any]) -> int:
-    cluster_id = int(profiler.predict(make_profile_input(values))[0])
-    if cluster_id not in PROFILE_NAMES:
-        raise ValueError(f"Unexpected profile ID: {cluster_id}")
-    return cluster_id
+def validate_inputs(values:dict[str,Any])->list[str]:
+    errors=[]
+    if values['Curricular units 1st sem (approved)']>values['Curricular units 1st sem (enrolled)']: errors.append('Courses Passed cannot be greater than Courses Enrolled.')
+    return errors
 
-def profile_characteristics(profile: dict, limit: int = 5) -> list[str]:
-    preferred = ["age_group", "academic_level", "employment_type", "personal_income", "study_routine"]
-    return [f"{INPUT_LABELS[f]}: {profile['dominant_values'][f]['value']} ({profile['dominant_values'][f]['percentage']:.1f}% of this profile)" for f in preferred[:limit]]
+def dropout_probability(artifact:dict[str,Any],values:dict[str,Any])->float:
+    pipeline=artifact['pipeline']; classes=list(pipeline.classes_); index=classes.index(1)
+    return float(pipeline.predict_proba(make_input_frame(values))[0,index])
 
-def metric_cards(items: list[tuple[str, str]]) -> None:
-    for column, (label, value) in zip(st.columns(len(items)), items):
-        column.metric(label, value)
+def risk_label(probability:float)->str: return 'Elevated Estimated Risk' if probability>=THRESHOLD else 'Lower Estimated Risk'
 
-def page_home() -> None:
-    st.title("Student Profiling and Dropout Risk Factor Analysis")
-    st.subheader("Machine Learning-Based Analysis of Bangladeshi University Students")
-    st.write("This academic prototype uses unsupervised machine learning to identify common student profiles from academic, socioeconomic and lifestyle characteristics. It also explores how selected factors relate to students’ self-reported consideration of dropping out due to academic stress.")
-    st.markdown('<div class="workflow"><span>Student Survey Information</span><b>→</b><span>Data Preprocessing</span><b>→</b><span>K-Means Profiling</span><b>→</b><span>Student Profile</span><strong>+</strong><span>Dropout Risk Factor Analysis</span></div>', unsafe_allow_html=True)
-    metric_cards([("Dataset", "Bangladesh survey"), ("Raw responses", "368"), ("Cleaned responses", "351"), ("ML method", "K-Means"), ("Profiles", "2")])
-    st.info("The system identifies descriptive patterns and explores associations. It does not forecast an individual student’s future outcome.")
+def cards(items:list[tuple[str,str]])->None:
+    for column,(label,value) in zip(st.columns(len(items)),items): column.metric(label,value)
 
-def page_profile_explorer(profiler: Any, profiles: list[dict]) -> None:
-    st.title("Student Profile Explorer")
-    st.write("Enter 12 academic, socioeconomic and lifestyle characteristics to find the closest survey profile.")
-    with st.form("profile_form"):
-        left, right = st.columns(2)
-        answers: dict[str, Any] = {}
-        for index, feature in enumerate(PROFILE_FEATURES):
-            with (left if index % 2 == 0 else right):
-                if feature == "internet_quality":
-                    answers[feature] = st.select_slider(INPUT_LABELS[feature], options=INPUT_OPTIONS[feature], value=3, help="1 = very poor, 5 = very good")
-                else:
-                    answers[feature] = st.selectbox(INPUT_LABELS[feature], INPUT_OPTIONS[feature])
-        submitted = st.form_submit_button("Find Student Profile", type="primary", width="stretch")
+def home()->None:
+    st.title('Student Dropout Early Warning System')
+    st.subheader('Machine Learning-Based Early Identification After the First Semester')
+    st.write("This academic prototype estimates a student's risk of later university dropout using information available after the first semester. The goal is to help identify students who may benefit from earlier academic or financial support.")
+    st.markdown('<div class="workflow"><span>Semester 1 Completed</span><b>→</b><span>Student Information</span><b>→</b><span>Machine Learning</span><b>→</b><span>Dropout Risk Estimate</span><b>→</b><span>Early Support</span></div>',unsafe_allow_html=True)
+    cards([('Prediction point','End of Semester 1'),('Model','Random Forest'),('Training cohort','3,630 resolved outcomes'),('Inputs','12'),('Test ROC-AUC','93.9%')])
+    st.markdown('### Why Early Warning?')
+    st.write('Universities may recognise dropout only after a student has disengaged or left. An early-warning estimate can help departments consider whether academic advising, financial-support review, study support, counselling, or a follow-up conversation may be useful. It does not automatically require intervention.')
+
+def assessment(artifact:dict[str,Any])->None:
+    st.title('Assess Dropout Risk'); st.caption('Complete this form after the student has finished Semester 1.')
+    with st.form('assessment_form'):
+        st.markdown('### Student Background'); c1,c2,c3=st.columns(3)
+        age=c1.number_input('Age at Enrollment',17,70,19,help='Supported training range: 17–70 years.')
+        previous=c2.number_input('Previous Academic Grade',95.0,190.0,130.0,step=0.1,help='Source dataset scale: 95–190.')
+        admission=c3.number_input('Admission Grade',95.0,190.0,130.0,step=0.1,help='Source dataset scale: 95–190.')
+        st.markdown('### Family Background'); c1,c2=st.columns(2); labels=list(OCCUPATION_BY_LABEL)
+        mother_label=c1.selectbox("Mother’s Occupation",labels,index=labels.index('Unskilled workers'))
+        father_label=c2.selectbox("Father’s Occupation",labels,index=labels.index('Unskilled workers'))
+        st.markdown('### Financial Status'); c1,c2,c3=st.columns(3)
+        scholarship=c1.selectbox('Scholarship Holder',['No','Yes']); debtor=c2.selectbox('Debtor',['No','Yes']); tuition=c3.selectbox('Tuition Fees Up to Date',['No','Yes'])
+        st.markdown('### First-Semester Performance'); c1,c2,c3,c4=st.columns(4)
+        enrolled=c1.number_input('Courses Enrolled',0,26,6); evaluations=c2.number_input('Evaluations Completed',0,45,8); approved=c3.number_input('Courses Passed',0,26,5); grade=c4.number_input('Average Semester Grade',0.0,18.875,12.0,step=0.1)
+        submitted=st.form_submit_button('Estimate Dropout Risk',type='primary',width='stretch')
     if submitted:
-        cluster_id = assign_profile(profiler, answers)
-        profile = next(item for item in profiles if item["cluster_id"] == cluster_id)
-        number, name = PROFILE_NAMES[cluster_id].split(" — ", maxsplit=1)
-        st.markdown("### Your Student Profile")
-        st.markdown(f'<div class="result-card"><div class="eyebrow">{number}</div><h2>{name}</h2><p>This profile represents the group in the survey dataset whose characteristics are most similar to the responses entered above.</p></div>', unsafe_allow_html=True)
-        st.markdown("#### Defining characteristics in the survey")
-        for description in profile_characteristics(profile):
-            st.markdown(f"- {description}")
-        st.warning("Profile assignment is descriptive and is not a prediction of whether a student will drop out.")
-    st.markdown("### Profile comparison")
-    metric_cards([("Profile 1", "213 students · 60.7%"), ("Profile 2", "138 students · 39.3%")])
+        values={'Age at enrollment':age,'Previous qualification (grade)':previous,'Admission grade':admission,"Mother's occupation":OCCUPATION_BY_LABEL[mother_label],"Father's occupation":OCCUPATION_BY_LABEL[father_label],'Scholarship holder':int(scholarship=='Yes'),'Debtor':int(debtor=='Yes'),'Tuition fees up to date':int(tuition=='Yes'),'Curricular units 1st sem (enrolled)':enrolled,'Curricular units 1st sem (evaluations)':evaluations,'Curricular units 1st sem (approved)':approved,'Curricular units 1st sem (grade)':grade}
+        errors=validate_inputs(values)
+        if errors:
+            for error in errors: st.error(error)
+            return
+        probability=dropout_probability(artifact,values); label=risk_label(probability); elevated=label.startswith('Elevated')
+        st.markdown('### Dropout Early-Warning Assessment')
+        st.markdown(f'<div class="result {"elevated" if elevated else "lower"}"><div>Estimated Dropout Risk</div><strong>{probability:.1%}</strong><h2>{label}</h2></div>',unsafe_allow_html=True)
+        if elevated: st.write("The student's first-semester profile is similar to patterns associated with later dropout in the model's training data. This result may be used as an early signal for further academic or student-support review.")
+        else: st.write("The student's first-semester profile is associated with a lower estimated risk of later dropout in the training data. This does not guarantee that the student will remain enrolled.")
+        st.warning('This is an estimated probability from an academic machine-learning model, not a certainty. Probability calibration was usable in the held-out evaluation but has not been externally validated for Bangladeshi universities.')
+        if elevated:
+            st.markdown('#### Possible Follow-Up'); st.markdown('- Academic advising\n- Review of Semester-1 difficulties\n- Financial-support discussion where relevant\n- Student-services or counselling referral where appropriate\n- Follow-up conversation with the student')
 
-def page_factor_analysis() -> None:
-    st.title("Dropout Risk Factor Analysis")
-    st.write("The survey asked students how likely they were to consider dropping out due to academic stress. This section explores statistical associations between student characteristics and that self-reported response.")
-    metric_cards([("Not Elevated (responses 1–3)", "274 · 78.1%"), ("Elevated (responses 4–5)", "77 · 21.9%")])
-    st.caption("This binary grouping is used only for descriptive analysis.")
-    st.markdown("### Association with Elevated Dropout Consideration")
-    chart_data = FACTOR_ASSOCIATIONS.sort_values("Cramér’s V")
-    fig, ax = plt.subplots(figsize=(8, 4.2))
-    ax.barh(chart_data["Factor"], chart_data["Cramér’s V"], color="#277da1")
-    ax.set_xlabel("Cramér’s V"); ax.set_xlim(0, 0.21); ax.spines[["top", "right"]].set_visible(False)
-    for index, value in enumerate(chart_data["Cramér’s V"]): ax.text(value + 0.003, index, f"{value:.3f}", va="center", fontsize=9)
-    fig.tight_layout(); st.pyplot(fig, width="stretch"); plt.close(fig)
-    st.caption("Higher values indicate stronger association within this dataset. These results do not establish causation.")
-    st.markdown("### Student profiles and dropout consideration")
-    comparison = pd.DataFrame({"Profile": ["Profile 1", "Profile 2"], "Elevated (%)": [20.7, 23.9]})
-    st.bar_chart(comparison.set_index("Profile"), color="#6c8ebf", horizontal=True)
-    st.error("The difference was not statistically significant.")
-    metric_cards([("χ²(1)", "0.346"), ("p-value", "0.557"), ("Cramér’s V", "0.038")])
-    st.write("Student-profile membership had negligible association with elevated dropout consideration in this sample.")
+def performance(results:dict)->None:
+    st.title('Model Performance'); st.write('Locked Random Forest evaluation on the untouched 20% holdout set.')
+    cards([('Threshold','0.48'),('Accuracy','88.3%'),('Balanced Accuracy','88.1%'),('Precision','83.5%'),('Recall','87.3%')]); cards([('F1','85.4%'),('ROC-AUC','93.9%'),('PR-AUC','93.0%'),('Brier Score','0.0967'),('Alert rate','40.91%')])
+    st.markdown('### What the metrics mean'); st.markdown('- **Recall:** Among held-out students who later dropped out, approximately 87% were identified.\n- **Precision:** Among students flagged as elevated risk, approximately 84% were dropout cases in the held-out dataset.\n- **F1:** Balances precision and recall.\n- **ROC-AUC:** Measures separation of dropout and graduate outcomes across thresholds.\n- **PR-AUC:** Measures precision-recall performance and is useful when classes are not perfectly balanced.')
+    st.markdown('### Confusion matrix'); cards([('Correctly identified graduates','393'),('False early warnings','49'),('Missed dropout cases','36'),('Correctly identified dropout cases','248')]); st.image(str(CM_PATH),width='stretch')
+    st.markdown("### Features associated with the model's dropout predictions")
+    chart=FEATURE_IMPORTANCE.sort_values('Association'); fig,ax=plt.subplots(figsize=(8,5)); ax.barh(chart['Feature'],chart['Association'],color='#266b7a'); ax.set_xlabel('Training permutation importance (ROC-AUC decrease)'); ax.spines[['top','right']].set_visible(False); fig.tight_layout(); st.pyplot(fig,width='stretch'); plt.close(fig)
+    st.caption('Importance reflects predictive association in this model and does not establish causation. Pass rate is derived from Courses Passed and Courses Enrolled.')
+    st.markdown('### Probability calibration'); st.image(str(CALIBRATION_PATH),width='stretch'); st.caption('Calibration was usable on the held-out dataset, with some variation across probability ranges. Local recalibration may be needed.')
 
-def page_methodology(metadata: dict) -> None:
-    st.title("Methodology & Dataset")
-    st.markdown("### Dataset and cleaning")
-    metric_cards([("Original responses", "368"), ("Duplicate copies removed", "17"), ("Unique profiles", "351"), ("Clustering features", "12")])
-    st.write("Two duplicate-profile groups were detected. One contained 16 near-immediate repeated submissions and another contained 3 repeated submissions. Duplicate copies were removed without exposing respondent information.")
-    st.markdown("- Target excluded from clustering: **Yes**\n- Timestamp excluded: **Yes**\n- Academic-overwhelm question excluded from primary clustering: **Yes**")
-    st.markdown("### Unsupervised machine learning")
-    st.write("K-Means is an unsupervised machine-learning algorithm that groups observations according to similarity. Unlike supervised classification, it does not require a predefined target label during training. The value k = 2 was selected after evaluating k = 2–5.")
-    metric_cards([("Silhouette", f"{metadata['silhouette']:.4f}"), ("Davies–Bouldin", f"{metadata['davies_bouldin']:.4f}"), ("Mean ARI stability", f"{metadata['stability_pairwise_ari_mean']:.4f}")])
-    st.write("The relatively low silhouette score indicates that the profiles are not sharply separated. The high stability score indicates that repeated clustering runs produced almost the same grouping. The profiles were highly reproducible but only weakly separated geometrically.")
-    st.image(str(PCA_PATH), caption="Two-dimensional PCA visualization of the student profiles. PCA is shown for visualization only and was not used as a dropout-risk target.")
-    st.markdown("### Limitations")
-    st.markdown("- Small, self-reported survey sample with possible selection bias\n- Not nationally representative and no confirmed future dropout outcome\n- Cross-sectional rather than longitudinal data\n- Broad descriptive profiles with weak silhouette separation\n- Profile membership was not significantly associated with dropout consideration\n- Factor associations are exploratory; association does not imply causation")
+def about()->None:
+    st.title('About & Methodology')
+    st.markdown('### Dataset'); st.write("The model uses the UCI Machine Learning Repository dataset “Predict Students’ Dropout and Academic Success.”")
+    cards([('Original students','4,424'),('Resolved cohort','3,630'),('Graduate','2,209'),('Dropout','1,421'),('Enrolled excluded','794')])
+    st.markdown('### Why Enrolled was excluded'); st.write('Students labelled Enrolled did not yet have a resolved final outcome. Treating them as dropout or non-dropout would create an incorrect target, so only Graduate and Dropout outcomes were used.')
+    st.markdown('### Prediction timing and leakage controls'); st.write('The prediction point is the **end of the first semester**. Background, financial, and Semester-1 performance information is allowed. Target, every Semester-2 variable, final-outcome information, Application Mode, Application Order, Course code, Nationality, unemployment, inflation, and GDP are excluded. **No information occurring after the defined prediction point is used by the final model.**')
+    st.markdown('### Simplified form'); st.write('The larger candidate form contained 18 variables. The final system uses 12 user inputs. For Logistic Regression, simplification reduced CV ROC-AUC by 0.0133, PR-AUC by 0.0177, recall by 0.0198, and F1 by 0.0130. The smaller form was selected to improve usability while preserving most predictive performance.')
+    st.markdown('### Limitations'); st.markdown('- Dataset comes from Portuguese higher education\n- Model has not been validated on Bangladeshi university students\n- Academic systems may differ between countries\n- Occupation categories originate from the source dataset\n- Probability calibration may require local recalibration\n- Predictions are statistical estimates, not certainties\n- Outputs should support, not replace, human judgement\n- Local longitudinal data is needed before operational deployment')
+    st.info('This system is an academic prototype. Although the interface is designed to be understandable in a general university setting, the model was trained using Portuguese higher-education data. Operational use in Bangladesh would require external validation or retraining using local longitudinal student records.')
 
-def apply_style() -> None:
-    st.markdown("""<style>
-    .block-container {max-width:1120px;padding-top:2.2rem;padding-bottom:3rem} h1{color:#17324d;letter-spacing:-.025em} h2,h3{color:#244d68}
-    div[data-testid="stMetric"]{background:#f4f8fb;border:1px solid #dbe7ef;border-radius:14px;padding:1rem}
-    .workflow{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin:1.5rem 0 2rem}.workflow span{background:#eef6f8;color:#174b5e;border:1px solid #cfe2e8;padding:.65rem .8rem;border-radius:10px;font-weight:600}.workflow strong{font-size:1.3rem;color:#277da1}
-    .result-card{background:linear-gradient(135deg,#edf7f7,#f5f8fc);border:1px solid #cfe2e8;border-left:6px solid #277da1;border-radius:16px;padding:1.3rem 1.5rem;margin:.5rem 0 1rem}.result-card h2{margin:.15rem 0 .5rem}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#277da1;font-weight:750}
-    @media(max-width:700px){.workflow b{display:none}div[data-testid="stHorizontalBlock"]{gap:.5rem}}</style>""", unsafe_allow_html=True)
+def style()->None:
+    st.markdown('''<style>.block-container{max-width:1120px;padding-top:2.2rem;padding-bottom:3rem}h1{color:#18384f;letter-spacing:-.025em}h2,h3{color:#24566b}div[data-testid="stMetric"]{background:#f3f7f9;border:1px solid #d9e6ea;border-radius:14px;padding:1rem}.workflow{display:flex;flex-wrap:wrap;gap:.65rem;align-items:center;margin:1.5rem 0 2rem}.workflow span{background:#edf6f7;color:#174d5b;border:1px solid #cfe3e7;padding:.65rem .8rem;border-radius:10px;font-weight:650}.result{border-radius:16px;padding:1.25rem 1.5rem;margin:.5rem 0 1rem;border:1px solid}.result strong{font-size:2.6rem}.result h2{margin:.2rem 0}.result.elevated{background:#fff7ed;border-color:#f2c994}.result.lower{background:#edf8f2;border-color:#b9dfc8}@media(max-width:700px){.workflow b{display:none}}</style>''',unsafe_allow_html=True)
 
-def main() -> None:
-    st.set_page_config(page_title="Bangladesh Student Profiling", page_icon="🎓", layout="wide")
-    apply_style(); metadata, profiles = load_project_data(); profiler = load_profiler()
-    st.sidebar.title("Student Profiling")
-    page = st.sidebar.radio("Navigate", ["Home", "Student Profile Explorer", "Dropout Risk Factor Analysis", "Methodology & Dataset"])
-    st.sidebar.caption("Academic prototype · Bangladesh university survey")
-    if page == "Home": page_home()
-    elif page == "Student Profile Explorer": page_profile_explorer(profiler, profiles)
-    elif page == "Dropout Risk Factor Analysis": page_factor_analysis()
-    else: page_methodology(metadata)
-
-if __name__ == "__main__": main()
+def main()->None:
+    st.set_page_config(page_title='Student Dropout Early Warning System',page_icon='🎓',layout='wide'); style(); artifact=load_model_artifact(); _,results=load_metadata()
+    st.sidebar.title('Early Warning System'); page=st.sidebar.radio('Navigate',['Home','Assess Dropout Risk','Model Performance','About & Methodology']); st.sidebar.caption('Prediction point · End of Semester 1')
+    if page=='Home': home()
+    elif page=='Assess Dropout Risk': assessment(artifact)
+    elif page=='Model Performance': performance(results)
+    else: about()
+if __name__=='__main__': main()
