@@ -85,6 +85,13 @@ def risk_class(score: int) -> str:
     raise ValueError(f"Risk score must be 1–5, got {score}")
 
 
+def elevated_risk(score: int) -> int:
+    """Map self-reported scores 4–5 to the binary elevated-risk class."""
+    if score not in (1, 2, 3, 4, 5):
+        raise ValueError(f"Risk score must be 1–5, got {score}")
+    return int(score >= 4)
+
+
 def _clean_text(value: object) -> object:
     if not isinstance(value, str):
         return value

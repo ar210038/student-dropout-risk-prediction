@@ -13,6 +13,7 @@ from bangladesh_risk_pipeline import (  # noqa: E402
     TARGET_QUESTION,
     TIMESTAMP_QUESTION,
     load_and_clean,
+    elevated_risk,
     ordinal_value,
     primary_model_frame,
     risk_class,
@@ -48,6 +49,13 @@ def test_target_conversion_and_risk_mapping():
     assert risk_class(3) == "Moderate Risk"
     assert risk_class(4) == "High Risk"
     assert risk_class(5) == "High Risk"
+    assert [elevated_risk(score) for score in range(1, 6)] == [0, 0, 0, 1, 1]
+
+
+def test_binary_target_counts_match_cleaned_survey():
+    cleaned, _ = load_and_clean(RAW)
+    target = cleaned["dropout_intention_score"].map(elevated_risk)
+    assert target.value_counts().to_dict() == {0: 274, 1: 77}
 
 
 def test_primary_schema_excludes_timestamp_target_and_overwhelm():
