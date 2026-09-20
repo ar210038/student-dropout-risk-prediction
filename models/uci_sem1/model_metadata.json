@@ -1,0 +1,45 @@
+{
+  "title": "Student Dropout Early Warning System Using Machine Learning",
+  "prediction_point": "End of first semester",
+  "model": "Random Forest",
+  "threshold": 0.48,
+  "features": [
+    "Age at enrollment",
+    "Previous qualification (grade)",
+    "Admission grade",
+    "Mother's occupation",
+    "Father's occupation",
+    "Scholarship holder",
+    "Debtor",
+    "Tuition fees up to date",
+    "Curricular units 1st sem (enrolled)",
+    "Curricular units 1st sem (evaluations)",
+    "Curricular units 1st sem (grade)",
+    "Semester pass rate"
+  ],
+  "raw_input_features": [
+    "Age at enrollment",
+    "Previous qualification (grade)",
+    "Admission grade",
+    "Mother's occupation",
+    "Father's occupation",
+    "Scholarship holder",
+    "Debtor",
+    "Tuition fees up to date",
+    "Curricular units 1st sem (enrolled)",
+    "Curricular units 1st sem (evaluations)",
+    "Curricular units 1st sem (grade)",
+    "Curricular units 1st sem (approved)"
+  ],
+  "target_mapping": {
+    "Graduate": 0,
+    "Dropout": 1
+  },
+  "excluded_outcome": "Enrolled",
+  "versions": {
+    "python": "3.14.5",
+    "sklearn": "1.9.1",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "limitation": "Trained on Portuguese higher-education data; requires external validation or local retraining before operational use elsewhere."
+}
