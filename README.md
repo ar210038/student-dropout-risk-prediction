@@ -1,148 +1,93 @@
-# Early Student Dropout Risk Prediction Using Machine Learning
+# Student Dropout Early Warning System Using Machine Learning
 
-This university project estimates the probability that a newly enrolled student may later drop out. It is intended as an early-support prototype, not an automated decision system.
+This academic project estimates elevated risk of later university dropout after a student completes Semester 1. It supports timely review—not automatic decisions or certainty about a student's future.
 
-The Streamlit website accepts the 24 demographic, application, financial, and contextual fields available at enrollment. It loads a previously fitted scikit-learn pipeline, reports the dropout probability, applies the saved 0.40 decision threshold, and presents a careful per-student model explanation.
+## Prediction point and target
+
+The prediction point is the **end of the first semester**. The model uses background, financial, and Semester-1 performance information available then.
+
+- Positive class: Dropout = 1
+- Negative class: Graduate = 0
+- Enrolled students are excluded because their final outcomes are unresolved
+- All Semester-2 and final-outcome information is excluded
 
 ## Dataset
 
-The active dataset is [UCI Predict Students' Dropout and Academic Success](https://archive.ics.uci.edu/dataset/697/predict+students+dropout+and+academic+success), DOI [`10.24432/C5MC89`](https://doi.org/10.24432/C5MC89), licensed under CC BY 4.0.
+The project uses the UCI Machine Learning Repository dataset **Predict Students' Dropout and Academic Success**.
 
-- Original dataset: 4,424 students, 36 predictors, and one target
-- Original outcomes: 2,209 Graduate, 1,421 Dropout, and 794 Enrolled
-- Modeling cohort: 3,630 students with resolved outcomes
-- Binary target: `Dropout = 1`, `Graduate = 0`
-- Prediction point: enrollment, before first-semester teaching
-
-Students whose outcome is still `Enrolled` are excluded from modeling. First- and second-semester academic variables are also excluded so that every predictor is available at the stated prediction point.
-
-## Final model
-
-The selected model is a class-weighted Logistic Regression pipeline with one-hot encoding for categorical fields and standardization for numerical fields. Model selection and threshold selection use only training-set cross-validation and out-of-fold predictions. The saved pipeline contains preprocessing and the fitted classifier together.
-
-Held-out test performance at the saved 0.40 threshold:
-
-| Metric | Result |
+| Cohort | Students |
 |---|---:|
-| Accuracy | 73.55% |
-| Precision | 62.04% |
-| Recall | 83.45% |
-| F1-score | 71.17% |
-| ROC-AUC | 85.48% |
+| Original dataset | 4,424 |
+| Graduate | 2,209 |
+| Dropout | 1,421 |
+| Enrolled excluded | 794 |
+| Resolved modeling cohort | 3,630 |
 
-The confusion matrix contains 237 correctly detected dropouts, 47 missed dropouts, 145 false dropout warnings, and 297 correctly identified graduates. Recall is prioritized because the intended use is to identify students who may benefit from supportive review.
+Dropout prevalence is 39.15%.
 
-## Technology stack
+## Final 11-input form
 
-- Python
-- Pandas and NumPy
-- scikit-learn
-- Matplotlib
-- Streamlit
-- pytest
+1. HSC / Equivalent GPA
+2. Age at Enrollment
+3. Mother's Occupation
+4. Father's Occupation
+5. Scholarship Holder
+6. Debtor
+7. Tuition Fees Up to Date
+8. Courses Enrolled
+9. Evaluations Completed
+10. Courses Passed
+11. Semester-1 GPA (0.00–4.00)
 
-## Project structure
+Admission Grade was removed. The source Previous Qualification Grade is normalized during training as `source grade / 190 × 5` and renamed `previous_academic_gpa_normalized`. Its exact observed support is 2.50–5.00, which becomes the website's HSC / Equivalent GPA range. This is a numerical scale normalization only; it does not claim academic equivalence between national grading systems.
 
-```text
-cse-dropout-prediction/
-├── .streamlit/
-├── data/
-├── models/
-├── notebooks/
-├── reports/
-├── src/
-├── tests/
-├── app.py
-├── requirements.txt
-├── README.md
-└── .gitignore
-```
+Occupation codes are presented as documented readable labels. Semester pass rate is calculated inside the pipeline as `Courses Passed / Courses Enrolled`; zero enrolled courses produces a rate of zero.
 
-Important files:
+For interface compatibility, the visible Semester-1 GPA is converted internally using `source semester grade = semester GPA / 4 × 18.875`. The user never enters or sees the source 0–18.875 value. This numerical normalization does not imply equivalence between Portuguese and Bangladeshi grading systems.
 
-- `data/student_dropout.csv` — active UCI dataset
-- `src/inspect_dataset.py` — dataset inspection and leakage-oriented checks
-- `src/train_model.py` — reproducible offline training and evaluation
-- `models/dropout_model.joblib` — fitted preprocessing-and-classifier pipeline
-- `models/model_metadata.json` — input schema, threshold, and metrics
-- `reports/dataset_analysis.md` — dataset and leakage analysis
-- `reports/model_evaluation.md` — model evaluation details
-- `reports/fairness_analysis.md` — subgroup diagnostics and limitations
-- `reports/local_validation_plan.md` — plan for a future Bangladeshi external-validation study
-- `.streamlit/config.toml` — minimal light-theme configuration; contains no secrets
-- `app.py` — four-page Streamlit interface; inference only
+## Model development and results
 
-## Installation
+Preprocessing and feature engineering are contained in a scikit-learn pipeline. Logistic Regression, Random Forest, and XGBoost were compared with repeated stratified cross-validation on training data. The holdout was not used for feature or threshold selection.
 
-**Recommended deployment version: Python 3.12.** Streamlit Community Cloud currently defaults to Python 3.12, and every direct dependency in this project declares Python 3.12 support. The current local machine has only Python 3.14.5 installed, so the completed test run described below used 3.14.5 rather than pretending that 3.12 was tested locally.
+The selected model is **Random Forest**, with a locked threshold of **0.48**.
 
-The scikit-learn version is fixed at 1.9.1 because the saved model artifact was created with that version. From the project directory, create and activate a virtual environment if desired, then install the requirements:
+| Held-out metric | Result |
+|---|---:|
+| Accuracy | 87.6% |
+| Balanced accuracy | 87.6% |
+| Precision | 81.9% |
+| Recall | 87.7% |
+| F1 | 84.7% |
+| ROC-AUC | 93.8% |
+| PR-AUC | 92.9% |
+| Brier score | 0.0997 |
+
+Confusion matrix: 387 correctly identified graduates, 55 false early warnings, 35 missed dropout cases, and 249 correctly identified dropout cases. The same holdout had been consulted in earlier project iterations, so these results are a final project benchmark rather than pristine external validation.
+
+## Streamlit interface
+
+The four pages are Home, Assess Dropout Risk, Model Performance, and About & Methodology. The assessment page loads the frozen artifact from `models/uci_sem1/`, calls `predict_proba()`, reads the Dropout=1 probability, and applies the saved threshold. It never retrains.
+
+## Leakage controls
+
+The final model excludes Target, every Semester-2 variable, final-outcome information, Application Mode, Application Order, Course code, Nationality, unemployment, inflation, and GDP. No information occurring after the prediction point is used.
+
+## Local use
+
+Python 3.12 is the deployment target. The artifact was trained under Python 3.14.5 with scikit-learn 1.9.1; Python 3.12 must be tested independently before deployment.
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-## Inspect the dataset
-
-```bash
-python src/inspect_dataset.py
-```
-
-## Train and save the model
-
-The repository includes the validated artifacts. To reproduce them locally:
-
-```bash
-python src/train_model.py
-```
-
-Training is an offline step. The Streamlit application never fits or retrains a model.
-
-## Run the website
-
-```bash
+python -m pytest -q --basetemp=.pytest_tmp
 python -m streamlit run app.py
 ```
 
-Use the sidebar to open Home, Predict Dropout Risk, Model Performance, and About Dataset.
+## Limitations
 
-## Deployment
-
-The project is prepared for [Streamlit Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy). It uses repository-relative `pathlib` paths and needs no database, external service, environment variable, or secret.
-
-1. Create a GitHub repository and push the complete project, including the saved model, metadata, figures, requirements, and Streamlit configuration.
-2. Sign in to Streamlit Community Cloud with GitHub.
-3. Select **Create app**.
-4. Choose the GitHub repository and branch.
-5. Set the entrypoint file to `app.py`.
-6. Open **Advanced settings** and select **Python 3.12**.
-7. Leave the secrets field empty; this project requires no secrets.
-8. Deploy the app.
-9. After deployment, verify all four pages, confirm that all three evaluation figures appear, and submit one sample prediction.
-
-Before pushing, confirm that these deployment-critical files are committed:
-
-```text
-app.py
-requirements.txt
-.streamlit/config.toml
-models/dropout_model.joblib
-models/model_metadata.json
-reports/figures/confusion_matrix.png
-reports/figures/roc_curve.png
-reports/figures/feature_importance.png
-```
-
-`.streamlit/secrets.toml` is intentionally excluded by `.gitignore` and must never be committed if secrets are added in the future.
-
-## Run tests
-
-```bash
-python -m pytest -q
-```
-
-## Responsible-use limitations
-
-The data comes from one Portuguese higher-education institution, covers multiple degree programs, and does not include exact dropout dates. Results may not transfer to Bangladesh or another university without local validation. Demographic and socioeconomic fields can introduce fairness concerns. Predictions are statistical associations—not causal findings—and must not be the sole basis for academic, financial, disciplinary, or admission decisions.
-
-See [`reports/local_validation_plan.md`](reports/local_validation_plan.md) for a realistic external-validation protocol covering local feature mapping, frozen-model evaluation, calibration, fairness, privacy, and governance. The plan does not fabricate local data or results.
+- Data comes from Portuguese higher education and has not been validated in Bangladesh.
+- Academic systems may differ between countries.
+- Occupation categories originate from the source dataset.
+- Probability calibration may require local recalibration.
+- Predictions are estimates, not certainties.
+- Outputs should support, not replace, human judgement.
+- Operational deployment requires local longitudinal validation or retraining.

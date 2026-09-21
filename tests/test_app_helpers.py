@@ -1,55 +1,77 @@
-"""Focused checks for inference helpers used by the Streamlit interface."""
-
-from __future__ import annotations
-
+"""Active Semester-1 website safety and inference tests."""
 import json
-
+from pathlib import Path
 import joblib
 import pandas as pd
-import pytest
+from streamlit.testing.v1 import AppTest
+from app import (FORM_FIELDS,METADATA_PATH,MODEL_PATH,OCCUPATIONS,OCCUPATION_BY_LABEL,
+    RESULTS_PATH,THRESHOLD,dropout_probability,make_input_frame,risk_label,
+    semester_gpa_to_source_grade,validate_inputs)
+from src.uci_sem1_features import normalize_previous_grade
 
-from app import (
-    CATEGORY_MAPPINGS,
-    METADATA_PATH,
-    MODEL_PATH,
-    OBSERVED_CODES,
-    dropout_probability,
-    individual_contributions,
-    make_input_frame,
-    risk_level,
-)
-from src.train_model import DATASET_PATH, load_raw_dataset, prepare_modeling_data
+ROOT=Path(__file__).resolve().parents[1]
 
+def sample_values(**overrides):
+    values={'previous_academic_gpa_normalized':3.5,'Age at enrollment':19,"Mother's occupation":9,"Father's occupation":9,'Scholarship holder':0,'Debtor':0,'Tuition fees up to date':1,'Curricular units 1st sem (enrolled)':6,'Curricular units 1st sem (evaluations)':8,'Curricular units 1st sem (approved)':5,'Curricular units 1st sem (grade)':12.0}
+    values.update(overrides); return values
 
-@pytest.mark.parametrize(
-    ("probability", "expected"),
-    [(0.0, "Low Risk"), (0.299, "Low Risk"), (0.30, "Moderate Risk"),
-     (0.399, "Moderate Risk"), (0.40, "High Risk"), (1.0, "High Risk")],
-)
-def test_risk_bands(probability: float, expected: str) -> None:
-    assert risk_level(probability) == expected
+def test_exactly_twelve_fields_and_no_banned_inputs():
+    assert len(FORM_FIELDS)==11
+    banned=['2nd sem','Application mode','Application order','Course','Nacionality','Unemployment rate','Inflation rate','GDP',"Mother's qualification","Father's qualification",'Admission grade','Previous qualification (grade)']
+    assert all(not any(term.lower() in field.lower() for term in banned) for field in FORM_FIELDS)
 
+def test_occupation_labels_round_trip_without_raw_display_codes():
+    assert OCCUPATIONS[4]=='Administrative staff'
+    assert OCCUPATION_BY_LABEL['Skilled industry, construction and craft workers']==7
+    assert len(OCCUPATIONS)==len(OCCUPATION_BY_LABEL)
 
-def test_all_observed_category_codes_have_readable_labels() -> None:
-    assert set(OBSERVED_CODES) == set(CATEGORY_MAPPINGS)
-    for feature, codes in OBSERVED_CODES.items():
-        assert all(code in CATEGORY_MAPPINGS[feature] for code in codes)
+def test_courses_passed_validation_and_input_order():
+    assert validate_inputs(sample_values(**{'Curricular units 1st sem (enrolled)':4,'Curricular units 1st sem (approved)':5}))==['Courses Passed cannot be greater than Courses Enrolled.']
+    assert validate_inputs(sample_values(**{'Curricular units 1st sem (enrolled)':0,'Curricular units 1st sem (approved)':0}))==[]
+    assert list(make_input_frame(sample_values()).columns)==FORM_FIELDS
 
+def test_semester_gpa_normalization_examples():
+    expected={0.00:0.0,2.00:9.4375,3.00:14.15625,3.50:16.515625,4.00:18.875}
+    assert {value:semester_gpa_to_source_grade(value) for value in expected}==expected
 
-def test_saved_pipeline_accepts_exact_metadata_schema_and_explains_prediction() -> None:
-    with METADATA_PATH.open("r", encoding="utf-8") as handle:
-        metadata = json.load(handle)
-    pipeline = joblib.load(MODEL_PATH)
-    raw = load_raw_dataset(DATASET_PATH)
-    features, _ = prepare_modeling_data(raw)
-    values = features.iloc[0].to_dict()
+def test_saved_artifact_probability_and_locked_threshold():
+    artifact=joblib.load(MODEL_PATH); metadata=json.loads(METADATA_PATH.read_text(encoding='utf-8'))
+    probability=dropout_probability(artifact,sample_values())
+    assert 0<=probability<=1
+    assert artifact['threshold']==metadata['threshold']==THRESHOLD==0.48
 
-    row = make_input_frame(values, metadata["feature_list"])
-    probability = dropout_probability(pipeline, row)
-    contributions = individual_contributions(pipeline, row, metadata)
+def test_both_result_paths():
+    assert risk_label(0.479999)=='Lower Estimated Risk'
+    assert risk_label(0.48)=='Elevated Estimated Risk'
+    artifact=joblib.load(MODEL_PATH)
+    raw=pd.read_csv(ROOT/'data'/'student_dropout.csv',sep=';'); raw.columns=raw.columns.str.strip()
+    raw['previous_academic_gpa_normalized']=normalize_previous_grade(raw['Previous qualification (grade)'])
+    probabilities=artifact['pipeline'].predict_proba(raw[FORM_FIELDS])[:,list(artifact['pipeline'].classes_).index(1)]
+    assert risk_label(float(probabilities.min()))=='Lower Estimated Risk'
+    assert risk_label(float(probabilities.max()))=='Elevated Estimated Risk'
 
-    assert isinstance(row, pd.DataFrame)
-    assert list(row.columns) == metadata["feature_list"]
-    assert 0.0 <= probability <= 1.0
-    assert len(contributions) == 5
-    assert set(contributions["Feature"]).issubset(metadata["feature_list"])
+def test_metrics_match_locked_results():
+    r=json.loads(RESULTS_PATH.read_text(encoding='utf-8'))['test_metrics']
+    assert round(r['precision'],4)==0.8191 and round(r['recall'],4)==0.8768
+    assert round(r['f1'],4)==0.8469 and round(r['roc_auc'],4)==0.9378
+    assert round(r['average_precision'],4)==0.9286 and round(r['brier_score'],4)==0.0997
+
+def test_active_source_has_no_old_profile_ui_or_deterministic_claim():
+    source=(ROOT/'app.py').read_text(encoding='utf-8').lower()
+    banned=['k-means','student profile explorer','profile 1','profile 2','silhouette','davies-bouldin','clustering pca','will drop out','admission grade']
+    assert all(term not in source for term in banned)
+
+def test_all_pages_render_without_exceptions_and_form_has_12_widgets():
+    app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
+    expected={'Home':'Student Dropout Early Warning System','Assess Dropout Risk':'Assess Dropout Risk','Model Performance':'Model Performance','About & Methodology':'About & Methodology'}
+    for page,title in expected.items():
+        app.radio[0].set_value(page).run(); assert not app.exception; assert title in [item.value for item in app.title]
+    app.radio[0].set_value('Assess Dropout Risk').run()
+    assert len(app.number_input)+len(app.selectbox)==11
+    gpa=next(item for item in app.number_input if item.label=='HSC / Equivalent GPA')
+    assert gpa.min==2.5 and gpa.max==5.0 and gpa.step==0.01
+    semester_gpa=next(item for item in app.number_input if item.label=='Semester-1 GPA')
+    assert semester_gpa.min==0.0 and semester_gpa.max==4.0 and semester_gpa.step==0.01
+    semester_gpa.set_value(4.0); app.button[0].click().run()
+    assert not app.exception
+    assert not app.error
