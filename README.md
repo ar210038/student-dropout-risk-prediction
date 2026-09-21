@@ -106,8 +106,8 @@ python -m streamlit run app.py
 
 ## Local dashboard and batch analysis
 
-The local-only dashboard has four pages: Dashboard, Individual Assessment, Batch Analysis, and About Project. Batch Analysis accepts an in-memory CSV export from Google Forms/Sheets, validates every row, applies the same frozen 11-input Random Forest and 0.48 threshold, summarizes risk and warning indicators, and provides a self-contained results CSV download.
+The dashboard has four pages: Dashboard, Individual Assessment, Batch Analysis, and About Project. Batch Analysis accepts in-memory CSV or Excel (.xlsx) exports from Google Forms/Sheets, validates every row, applies the same frozen 11-input Random Forest and 0.48 threshold, summarizes risk and warning indicators, and provides CSV or Excel results downloads.
 
-Use **Download CSV Template** on the Batch Analysis page for the exact schema. `Anonymous Follow-Up ID` and `Current Semester / Academic Year` are metadata only; they never enter the model. Uploaded files are not written to disk or stored in a database. Avoid names, phone numbers, email addresses, and other unnecessary identifying data.
+Use **Download CSV Template** or **Download Excel Template** on the Batch Analysis page for the exact schema. `Anonymous Follow-Up ID` and `Current Semester / Academic Year` are metadata only; they never enter the model. Uploaded files are not written to disk or stored in a database. Avoid names, phone numbers, email addresses, and other unnecessary identifying data.
 
 A five-record demonstration file is available at `data/sample_batch_students.csv`.

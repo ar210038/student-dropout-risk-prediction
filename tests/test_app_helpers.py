@@ -1,5 +1,6 @@
 """Safety, inference, support-layer, batch, and UI tests."""
 import hashlib
+import io
 import json
 from pathlib import Path
 import joblib
@@ -8,8 +9,9 @@ import pytest
 from streamlit.testing.v1 import AppTest
 from app import (BATCH_COLUMNS,FORM_FIELDS,ID_COLUMN,METADATA_PATH,MODEL_PATH,OCCUPATIONS,
     OCCUPATION_BY_LABEL,RESULT_COLUMNS,SEMESTER_COLUMN,THRESHOLD,USER_FIELDS,analyze_batch,
-    dropout_probability,export_results,make_input_frame,parse_boolean,predict_student,risk_label,
-    semester_gpa_to_source_grade,support_guidance,validate_batch_dataframe,validate_inputs)
+    dropout_probability,export_results,export_results_excel,make_input_frame,parse_boolean,predict_student,
+    read_uploaded_table,risk_label,semester_gpa_to_source_grade,support_guidance,template_excel,
+    validate_batch_dataframe,validate_inputs)
 from src.uci_sem1_features import normalize_previous_grade
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -90,6 +92,24 @@ def test_export_contains_required_columns_and_human_labels():
     assert set(RESULT_COLUMNS).issubset(exported.columns)
     assert exported.loc[0,"Mother's Occupation"]=='Administrative staff'
     assert not any('occupation code' in column.lower() for column in exported.columns)
+    exported_excel=pd.read_excel(io.BytesIO(export_results_excel(result)),engine='openpyxl')
+    assert set(RESULT_COLUMNS).issubset(exported_excel.columns)
+
+def test_excel_template_and_upload_are_supported():
+    template_bytes=template_excel()
+    workbook=io.BytesIO(template_bytes); workbook.name='student_batch_template.xlsx'
+    loaded=read_uploaded_table(workbook)
+    assert list(loaded.columns)==BATCH_COLUMNS
+    assert loaded.loc[0,ID_COLUMN]=='EXAMPLE-001'
+
+    csv_file=io.BytesIO(pd.DataFrame([student()]).to_csv(index=False).encode('utf-8')); csv_file.name='students.csv'
+    assert read_uploaded_table(csv_file).loc[0,ID_COLUMN]=='ST001'
+
+    xlsx=io.BytesIO()
+    with pd.ExcelWriter(xlsx,engine='openpyxl') as writer:
+        pd.DataFrame([student()]).to_excel(writer,index=False)
+    xlsx.seek(0); xlsx.name='students.xlsx'
+    assert read_uploaded_table(xlsx).loc[0,ID_COLUMN]=='ST001'
 
 def test_no_retraining_or_persistent_upload_storage_in_app():
     source=(ROOT/'app.py').read_text(encoding='utf-8').lower()
@@ -122,4 +142,4 @@ def test_batch_page_processes_five_row_upload_and_renders_outputs():
     assert not app.exception and not app.error
     markdown=' '.join(item.value for item in app.markdown)
     assert 'Total Students' in markdown and 'Elevated Risk' in markdown and 'Average Estimated Risk' in markdown
-    assert len(app.dataframe)>=1 and len(app.download_button)>=2
+    assert len(app.dataframe)>=1 and len(app.download_button)>=4
