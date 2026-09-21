@@ -29,11 +29,13 @@ The future application must load `models/uci_sem1/dropout_early_warning_model.jo
 8. Courses Enrolled
 9. Evaluations Completed
 10. Courses Passed
-11. Average Semester Grade
+11. Semester-1 GPA (0.00–4.00)
 
 The source Previous Qualification Grade is normalized during training with `grade / 190 × 5`; it is not converted in the frontend. This aligns numerical scales only and does not claim cross-country academic equivalence. Admission Grade is excluded.
 
 Courses Passed and Courses Enrolled are converted internally to Semester pass rate. Parent occupation codes must be rendered with the official UCI occupation descriptions; raw numeric codes must never be shown.
+
+Semester-1 GPA is converted internally with `source semester grade = GPA / 4 × 18.875` for compatibility with the frozen model. The converted value is never displayed. This is numerical normalization only and does not imply equivalence between Portuguese and Bangladeshi grading systems.
 
 ## Result wording
 

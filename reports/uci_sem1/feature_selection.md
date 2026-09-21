@@ -8,4 +8,4 @@ Examples: 190→5.00, 152→4.00, and 95→2.50. This is only a linear numerical
 
 Repeated-CV changes for the 11-input Random Forest were ROC-AUC −0.0001, PR-AUC −0.0005, precision −0.0028, recall −0.0004, and F1 −0.0016. These negligible changes support adopting the clearer form.
 
-The 11 visible fields are HSC / Equivalent GPA, Age at Enrollment, both parent occupations, Scholarship Holder, Debtor, Tuition Fees Up to Date, Courses Enrolled, Evaluations Completed, Courses Passed, and Average Semester Grade. Semester pass rate is derived safely as Passed/Enrolled, with zero used when Enrolled is zero.
+The 11 visible fields are HSC / Equivalent GPA, Age at Enrollment, both parent occupations, Scholarship Holder, Debtor, Tuition Fees Up to Date, Courses Enrolled, Evaluations Completed, Courses Passed, and Semester-1 GPA. Semester pass rate is derived safely as Passed/Enrolled, with zero used when Enrolled is zero. The visible 0–4 Semester-1 GPA is normalized internally to the frozen model's original 0–18.875 range; this is interface compatibility, not cross-country academic equivalence.

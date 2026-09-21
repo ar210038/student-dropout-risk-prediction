@@ -5,7 +5,8 @@ import joblib
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 from app import (FORM_FIELDS,METADATA_PATH,MODEL_PATH,OCCUPATIONS,OCCUPATION_BY_LABEL,
-    RESULTS_PATH,THRESHOLD,dropout_probability,make_input_frame,risk_label,validate_inputs)
+    RESULTS_PATH,THRESHOLD,dropout_probability,make_input_frame,risk_label,
+    semester_gpa_to_source_grade,validate_inputs)
 from src.uci_sem1_features import normalize_previous_grade
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -28,6 +29,10 @@ def test_courses_passed_validation_and_input_order():
     assert validate_inputs(sample_values(**{'Curricular units 1st sem (enrolled)':4,'Curricular units 1st sem (approved)':5}))==['Courses Passed cannot be greater than Courses Enrolled.']
     assert validate_inputs(sample_values(**{'Curricular units 1st sem (enrolled)':0,'Curricular units 1st sem (approved)':0}))==[]
     assert list(make_input_frame(sample_values()).columns)==FORM_FIELDS
+
+def test_semester_gpa_normalization_examples():
+    expected={0.00:0.0,2.00:9.4375,3.00:14.15625,3.50:16.515625,4.00:18.875}
+    assert {value:semester_gpa_to_source_grade(value) for value in expected}==expected
 
 def test_saved_artifact_probability_and_locked_threshold():
     artifact=joblib.load(MODEL_PATH); metadata=json.loads(METADATA_PATH.read_text(encoding='utf-8'))
@@ -65,3 +70,8 @@ def test_all_pages_render_without_exceptions_and_form_has_12_widgets():
     assert len(app.number_input)+len(app.selectbox)==11
     gpa=next(item for item in app.number_input if item.label=='HSC / Equivalent GPA')
     assert gpa.min==2.5 and gpa.max==5.0 and gpa.step==0.01
+    semester_gpa=next(item for item in app.number_input if item.label=='Semester-1 GPA')
+    assert semester_gpa.min==0.0 and semester_gpa.max==4.0 and semester_gpa.step==0.01
+    semester_gpa.set_value(4.0); app.button[0].click().run()
+    assert not app.exception
+    assert not app.error

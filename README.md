@@ -37,11 +37,13 @@ Dropout prevalence is 39.15%.
 8. Courses Enrolled
 9. Evaluations Completed
 10. Courses Passed
-11. Average Semester Grade
+11. Semester-1 GPA (0.00–4.00)
 
 Admission Grade was removed. The source Previous Qualification Grade is normalized during training as `source grade / 190 × 5` and renamed `previous_academic_gpa_normalized`. Its exact observed support is 2.50–5.00, which becomes the website's HSC / Equivalent GPA range. This is a numerical scale normalization only; it does not claim academic equivalence between national grading systems.
 
 Occupation codes are presented as documented readable labels. Semester pass rate is calculated inside the pipeline as `Courses Passed / Courses Enrolled`; zero enrolled courses produces a rate of zero.
+
+For interface compatibility, the visible Semester-1 GPA is converted internally using `source semester grade = semester GPA / 4 × 18.875`. The user never enters or sees the source 0–18.875 value. This numerical normalization does not imply equivalence between Portuguese and Bangladeshi grading systems.
 
 ## Model development and results
 

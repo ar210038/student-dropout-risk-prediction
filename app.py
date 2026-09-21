@@ -15,11 +15,12 @@ RESULTS_PATH=ROOT/'reports'/'uci_sem1'/'training_results_11_input.json'
 CM_PATH=ROOT/'reports'/'uci_sem1'/'figures'/'confusion_matrix_11_input.png'
 CALIBRATION_PATH=ROOT/'reports'/'uci_sem1'/'figures'/'calibration_curve_11_input.png'
 THRESHOLD=0.48
+SOURCE_SEMESTER_GRADE_MAX=18.875
 FORM_FIELDS=['previous_academic_gpa_normalized','Age at enrollment',"Mother's occupation","Father's occupation",'Scholarship holder','Debtor','Tuition fees up to date','Curricular units 1st sem (enrolled)','Curricular units 1st sem (evaluations)','Curricular units 1st sem (approved)','Curricular units 1st sem (grade)']
 OCCUPATIONS={
 0:'Student',1:'Legislative/executive representatives, directors and managers',2:'Intellectual and scientific specialists',3:'Intermediate-level technicians and professions',4:'Administrative staff',5:'Personal services, security and sales workers',6:'Skilled agriculture, fisheries and forestry workers',7:'Skilled industry, construction and craft workers',8:'Machine operators and assembly workers',9:'Unskilled workers',10:'Armed Forces',90:'Other situation',99:'Unspecified',101:'Armed Forces officers',102:'Armed Forces sergeants',103:'Other Armed Forces personnel',112:'Administrative and commercial services directors',114:'Hotel, catering, trade and other service directors',121:'Physical sciences, mathematics and engineering specialists',122:'Health professionals',123:'Teachers',124:'Finance, administration and commercial specialists',125:'Information and communication technology specialists',131:'Intermediate science and engineering technicians',132:'Intermediate health technicians',134:'Intermediate legal, social, cultural and sports services',135:'Information and communication technology technicians',141:'Office, secretarial and data-processing workers',143:'Data, accounting, statistics and financial operators',144:'Other administrative support staff',151:'Personal service workers',152:'Sellers',153:'Personal care workers',154:'Protection and security personnel',161:'Market-oriented farmers and skilled agricultural workers',163:'Subsistence farmers, fishers, hunters and gatherers',171:'Skilled construction workers (except electricians)',172:'Skilled metallurgy and metalworking workers',173:'Printing, precision, jewellery and craft workers',174:'Skilled electrical and electronics workers',175:'Food, wood, clothing and other craft workers',181:'Fixed-plant and machine operators',182:'Assembly workers',183:'Vehicle drivers and mobile-equipment operators',191:'Cleaning workers',192:'Unskilled agriculture, fisheries and forestry workers',193:'Unskilled extractive, construction, manufacturing and transport workers',194:'Meal preparation assistants',195:'Street vendors and service providers'}
 OCCUPATION_BY_LABEL={label:code for code,label in OCCUPATIONS.items()}
-FEATURE_IMPORTANCE=pd.DataFrame({'Feature':['Courses Passed','Courses Enrolled / Pass Rate','Tuition Fees Up to Date','Average Semester Grade','Scholarship','Father’s Occupation','Age','Mother’s Occupation','Evaluations Completed','HSC / Equivalent GPA','Debtor Status'],'Association':[.1433,.0339,.0262,.0216,.0164,.0093,.0090,.0089,.0083,.0081,.0072]})
+FEATURE_IMPORTANCE=pd.DataFrame({'Feature':['Courses Passed','Courses Enrolled / Pass Rate','Tuition Fees Up to Date','Semester-1 GPA','Scholarship','Father’s Occupation','Age','Mother’s Occupation','Evaluations Completed','HSC / Equivalent GPA','Debtor Status'],'Association':[.1433,.0339,.0262,.0216,.0164,.0093,.0090,.0089,.0083,.0081,.0072]})
 
 @st.cache_resource
 def load_model_artifact()->dict[str,Any]: return joblib.load(MODEL_PATH)
@@ -40,6 +41,10 @@ def dropout_probability(artifact:dict[str,Any],values:dict[str,Any])->float:
     return float(pipeline.predict_proba(make_input_frame(values))[0,index])
 
 def risk_label(probability:float)->str: return 'Elevated Estimated Risk' if probability>=THRESHOLD else 'Lower Estimated Risk'
+
+def semester_gpa_to_source_grade(semester_gpa:float)->float:
+    """Map the visible 0–4 GPA to the frozen model's original grade range."""
+    return float(semester_gpa)/4.0*SOURCE_SEMESTER_GRADE_MAX
 
 def cards(items:list[tuple[str,str]])->None:
     for column,(label,value) in zip(st.columns(len(items)),items): column.metric(label,value)
@@ -65,10 +70,10 @@ def assessment(artifact:dict[str,Any])->None:
         st.markdown('### Financial Status'); c1,c2,c3=st.columns(3)
         scholarship=c1.selectbox('Scholarship Holder',['No','Yes']); debtor=c2.selectbox('Debtor',['No','Yes']); tuition=c3.selectbox('Tuition Fees Up to Date',['No','Yes'])
         st.markdown('### First-Semester Performance'); c1,c2,c3,c4=st.columns(4)
-        enrolled=c1.number_input('Courses Enrolled',0,26,6); evaluations=c2.number_input('Evaluations Completed',0,45,8); approved=c3.number_input('Courses Passed',0,26,5); grade=c4.number_input('Average Semester Grade',0.0,18.875,12.0,step=0.1)
+        enrolled=c1.number_input('Courses Enrolled',0,26,6); evaluations=c2.number_input('Evaluations Completed',0,45,8); approved=c3.number_input('Courses Passed',0,26,5); semester_gpa=c4.number_input('Semester-1 GPA',0.00,4.00,3.00,step=0.01,help="Enter the student's first-semester GPA on a 4.00 scale. For compatibility with the training dataset, the value is normalized internally to the model's original Semester-1 grade range.")
         submitted=st.form_submit_button('Estimate Dropout Risk',type='primary',width='stretch')
     if submitted:
-        values={'previous_academic_gpa_normalized':previous,'Age at enrollment':age,"Mother's occupation":OCCUPATION_BY_LABEL[mother_label],"Father's occupation":OCCUPATION_BY_LABEL[father_label],'Scholarship holder':int(scholarship=='Yes'),'Debtor':int(debtor=='Yes'),'Tuition fees up to date':int(tuition=='Yes'),'Curricular units 1st sem (enrolled)':enrolled,'Curricular units 1st sem (evaluations)':evaluations,'Curricular units 1st sem (approved)':approved,'Curricular units 1st sem (grade)':grade}
+        values={'previous_academic_gpa_normalized':previous,'Age at enrollment':age,"Mother's occupation":OCCUPATION_BY_LABEL[mother_label],"Father's occupation":OCCUPATION_BY_LABEL[father_label],'Scholarship holder':int(scholarship=='Yes'),'Debtor':int(debtor=='Yes'),'Tuition fees up to date':int(tuition=='Yes'),'Curricular units 1st sem (enrolled)':enrolled,'Curricular units 1st sem (evaluations)':evaluations,'Curricular units 1st sem (approved)':approved,'Curricular units 1st sem (grade)':semester_gpa_to_source_grade(semester_gpa)}
         errors=validate_inputs(values)
         if errors:
             for error in errors: st.error(error)
@@ -100,6 +105,7 @@ def about()->None:
     st.markdown('### Prediction timing and leakage controls'); st.write('The prediction point is the **end of the first semester**. Background, financial, and Semester-1 performance information is allowed. Target, every Semester-2 variable, final-outcome information, Application Mode, Application Order, Course code, Nationality, unemployment, inflation, and GDP are excluded. **No information occurring after the defined prediction point is used by the final model.**')
     st.markdown('### Simplified form and normalized academic result'); st.write("The final system uses 11 user inputs. The original dataset records the student's previous qualification grade on a different numerical scale. For interface simplicity, this feature was linearly normalized during model training using `source grade / 190 × 5`, producing the observed 2.50–5.00 range.")
     st.warning('This normalization aligns numerical scales only; it does not imply that grading systems from different countries are academically equivalent.')
+    st.write("The visible Semester-1 GPA is entered on a 0–4 scale and normalized internally to the source model's observed 0–18.875 grade range. This is a numerical normalization for interface compatibility and does not imply equivalence between Portuguese and Bangladeshi grading systems.")
     st.write('Compared with the validated 12-input Random Forest, repeated-CV ROC-AUC changed by −0.0001, PR-AUC by −0.0005, recall by −0.0004, and F1 by −0.0016. The smaller form was selected to improve usability while preserving essentially all cross-validation performance.')
     st.markdown('### Limitations'); st.markdown('- Dataset comes from Portuguese higher education\n- Model has not been validated on Bangladeshi university students\n- Academic systems may differ between countries\n- Occupation categories originate from the source dataset\n- Probability calibration may require local recalibration\n- Predictions are statistical estimates, not certainties\n- Outputs should support, not replace, human judgement\n- Local longitudinal data is needed before operational deployment')
     st.info('This system is an academic prototype. Although the interface is designed to be understandable in a general university setting, the model was trained using Portuguese higher-education data. Operational use in Bangladesh would require external validation or retraining using local longitudinal student records.')
