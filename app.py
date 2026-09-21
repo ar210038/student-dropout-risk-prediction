@@ -130,9 +130,33 @@ def export_results(frame:pd.DataFrame)->bytes:
     columns=[*BATCH_COLUMNS,*RESULT_COLUMNS[2:]]
     return frame[[column for column in columns if column in frame.columns]].to_csv(index=False).encode('utf-8')
 
-def template_csv()->bytes:
+def template_frame()->pd.DataFrame:
     example={ID_COLUMN:'EXAMPLE-001',SEMESTER_COLUMN:'3rd Semester','HSC / Equivalent GPA':4.20,'Age at Enrollment':19,"Mother's Occupation":'Administrative staff',"Father's Occupation":'Unskilled workers','Scholarship Holder':'No','Debtor':'No','Tuition Fees Up to Date':'Yes','Courses Enrolled':6,'Evaluations Completed':6,'Courses Passed':5,'Semester GPA':3.25}
-    return pd.DataFrame([example],columns=BATCH_COLUMNS).to_csv(index=False).encode('utf-8')
+    return pd.DataFrame([example],columns=BATCH_COLUMNS)
+
+def template_csv()->bytes:
+    return template_frame().to_csv(index=False).encode('utf-8')
+
+def dataframe_to_excel(frame:pd.DataFrame,sheet_name:str)->bytes:
+    buffer=io.BytesIO()
+    with pd.ExcelWriter(buffer,engine='openpyxl') as writer:
+        frame.to_excel(writer,index=False,sheet_name=sheet_name)
+    return buffer.getvalue()
+
+def template_excel()->bytes:
+    return dataframe_to_excel(template_frame(),'Student Template')
+
+def export_results_excel(frame:pd.DataFrame)->bytes:
+    columns=[*BATCH_COLUMNS,*RESULT_COLUMNS[2:]]
+    selected=frame[[column for column in columns if column in frame.columns]]
+    return dataframe_to_excel(selected,'Analysis Results')
+
+def read_uploaded_table(uploaded:Any)->pd.DataFrame:
+    name=str(getattr(uploaded,'name','')).lower()
+    if hasattr(uploaded,'seek'): uploaded.seek(0)
+    if name.endswith('.csv'): return pd.read_csv(uploaded)
+    if name.endswith('.xlsx'): return pd.read_excel(uploaded,engine='openpyxl')
+    raise ValueError('Unsupported file type. Please upload a CSV or Excel (.xlsx) file.')
 
 def cards(items:list[tuple[str,str]])->None:
     for column,(value,label) in zip(st.columns(len(items)),items):
@@ -175,15 +199,17 @@ def individual_assessment(artifact:dict[str,Any])->None:
         render_result(predict_student(artifact,record),student_id.strip() or 'Individual Assessment')
 
 def batch_analysis(artifact:dict[str,Any])->None:
-    st.title('Batch Analysis'); st.write('Upload a Google Forms/Sheets CSV to assess multiple students with the same model and threshold.')
+    st.title('Batch Analysis'); st.write('Upload a Google Forms/Sheets CSV or Excel (.xlsx) file to assess multiple students with the same model and threshold.')
     st.info('For demonstration and research use, avoid uploading names, phone numbers, email addresses, or other unnecessary personally identifiable information. Use anonymous student IDs.')
-    st.download_button('Download CSV Template',template_csv(),'student_batch_template.csv','text/csv')
+    t1,t2=st.columns(2)
+    t1.download_button('Download CSV Template',template_csv(),'student_batch_template.csv','text/csv',use_container_width=True)
+    t2.download_button('Download Excel Template',template_excel(),'student_batch_template.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',use_container_width=True)
     with st.expander('Using Google Forms'):
-        st.markdown('1. Create a Google Form with the same student questions.\n2. Store responses in Google Sheets.\n3. Export the Sheet as CSV.\n4. Upload the CSV here.\n5. Analyze all students together.\n\nDirect Google Sheets synchronization can be considered as future work.')
-    uploaded=st.file_uploader('Upload student CSV',type='csv')
+        st.markdown('1. Create a Google Form with the same student questions.\n2. Store responses in Google Sheets.\n3. Export the Sheet as CSV or Excel (.xlsx).\n4. Upload the file here.\n5. Analyze all students together.\n\nDirect Google Sheets synchronization can be considered as future work.')
+    uploaded=st.file_uploader('Upload student CSV or Excel file',type=['csv','xlsx'])
     if uploaded is None: return
-    try: frame=pd.read_csv(uploaded)
-    except Exception as error: st.error(f'Could not read CSV: {error}'); return
+    try: frame=read_uploaded_table(uploaded)
+    except Exception as error: st.error(f'Could not read uploaded file: {error}'); return
     errors=validate_batch_dataframe(frame)
     if not errors.empty:
         st.error('The file contains validation problems. No rows were analyzed.'); st.dataframe(errors,use_container_width=True,hide_index=True); return
@@ -198,7 +224,9 @@ def batch_analysis(artifact:dict[str,Any])->None:
     if semester_filter!='All': filtered=filtered[filtered[SEMESTER_COLUMN].astype(str)==semester_filter]
     if search: filtered=filtered[filtered[ID_COLUMN].astype(str).str.contains(search,case=False,na=False)]
     display=filtered[[ID_COLUMN,SEMESTER_COLUMN,'Estimated Dropout Risk','Risk Level','Main Indicator']].copy(); display['Estimated Dropout Risk']=display['Estimated Dropout Risk'].map(lambda x:f'{x:.1%}'); st.dataframe(display,use_container_width=True,hide_index=True)
-    st.download_button('Download Analysis Results CSV',export_results(results),'student_batch_analysis.csv','text/csv')
+    d1,d2=st.columns(2)
+    d1.download_button('Download Analysis Results CSV',export_results(results),'student_batch_analysis.csv','text/csv',use_container_width=True)
+    d2.download_button('Download Analysis Results Excel',export_results_excel(results),'student_batch_analysis.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',use_container_width=True)
 
 def about()->None:
     st.title('About Project')
