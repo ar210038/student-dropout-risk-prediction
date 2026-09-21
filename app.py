@@ -40,6 +40,39 @@ def semester_gpa_to_source_grade(semester_gpa:float)->float:
     """Map the visible 0–4 GPA to the frozen model's original grade range."""
     return float(semester_gpa)/4.0*SOURCE_SEMESTER_GRADE_MAX
 
+def support_guidance(*,semester_gpa:float,enrolled:int,evaluations:int,passed:int,
+                     debtor:bool,tuition_up_to_date:bool,scholarship:bool,
+                     previous_gpa:float)->tuple[list[str],list[str]]:
+    """Return prioritized, non-causal indicators and institutional support options."""
+    pass_rate=passed/enrolled if enrolled else 0.0
+    evaluation_rate=evaluations/enrolled if enrolled else 0.0
+    candidates=[]
+    if semester_gpa<2.0:
+        candidates.append((10,f'Low recent academic performance — Semester GPA: {semester_gpa:.2f} / 4.00',['Academic advising','Tutoring / study support']))
+    if not enrolled:
+        candidates.append((9,'No course enrollment was reported',['Study-plan review']))
+    elif pass_rate<0.5:
+        candidates.append((9,f'Low course completion — {passed} of {enrolled} courses passed',['Course-specific academic support','Study-plan review']))
+    elif pass_rate<0.7:
+        candidates.append((5,f'Moderate course completion — {passed} of {enrolled} courses passed',['Study-plan review']))
+    if not tuition_up_to_date:
+        candidates.append((8,'Tuition fees are not currently up to date',['Financial-aid review','Installment/payment support if available']))
+    if debtor:
+        candidates.append((8,'Outstanding debtor status was reported',['Financial counselling','Review possible payment arrangements']))
+    if enrolled and evaluation_rate<0.75:
+        candidates.append((7,f'Low evaluation completion — {evaluations} evaluations for {enrolled} enrolled courses',['Student engagement follow-up','Check attendance / participation difficulties']))
+    if not scholarship and (debtor or not tuition_up_to_date):
+        candidates.append((4,'No scholarship was reported alongside a financial warning',['Review scholarship or student-aid eligibility']))
+    if previous_gpa<3.0:
+        candidates.append((3,f'Weaker previous academic background — HSC / Equivalent GPA: {previous_gpa:.2f} / 5.00',['Foundation/remedial academic support if needed']))
+    selected=sorted(candidates,key=lambda item:item[0],reverse=True)[:3]
+    supports=[]
+    for _,_,recommendations in selected:
+        if recommendations[0] not in supports: supports.append(recommendations[0])
+    for _,_,recommendations in selected:
+        for recommendation in recommendations[1:]:
+            if recommendation not in supports and len(supports)<4: supports.append(recommendation)
+    return [indicator for _,indicator,_ in selected],supports
 def cards(items:list[tuple[str,str]])->None:
     for column,(label,value) in zip(st.columns(len(items)),items): column.metric(label,value)
 
@@ -76,10 +109,17 @@ def assessment(artifact:dict[str,Any])->None:
         st.markdown('### Dropout Early-Warning Assessment')
         st.markdown(f'<div class="result {"elevated" if elevated else "lower"}"><div>Estimated Dropout Risk</div><strong>{probability:.1%}</strong><h2>{label}</h2></div>',unsafe_allow_html=True)
         if elevated: st.write("The student's recent academic profile is similar to patterns associated with later dropout in the training data. Consider a supportive follow-up review.")
-        else: st.write("The student's recent academic profile is associated with lower estimated risk in the training data. This does not guarantee that the student will remain enrolled.")
+        else: st.write('No major immediate warning indicators were identified from the entered information. Continue normal academic monitoring.')
         st.warning('This is an estimated probability from an academic machine-learning model, not a certainty. The model has not been externally validated for Bangladeshi universities.')
         if elevated:
-            st.markdown('#### Possible Follow-Up'); st.markdown('- Academic advising\n- Review of recent-semester difficulties\n- Financial-support discussion where relevant\n- Student-services or counselling referral where appropriate\n- Follow-up conversation with the student')
+            indicators,supports=support_guidance(semester_gpa=semester_gpa,enrolled=enrolled,evaluations=evaluations,passed=approved,debtor=debtor=='Yes',tuition_up_to_date=tuition=='Yes',scholarship=scholarship=='Yes',previous_gpa=previous)
+            st.markdown('#### Key Risk Indicators')
+            st.caption('These indicators are based on the information entered and should not be interpreted as confirmed causes of dropout.')
+            if indicators: st.markdown('\n'.join(f'- {indicator}' for indicator in indicators))
+            else: st.write('No single actionable warning met the support-layer rule thresholds.')
+            st.markdown('#### Possible Institute Support')
+            if supports: st.markdown('\n'.join(f'- {support}' for support in supports))
+            else: st.markdown('- Continue an individual academic-support review')
 
 def about()->None:
     st.title('About Project')
@@ -89,6 +129,7 @@ def about()->None:
     st.markdown('### Methodology'); st.write("The source model was trained using first-semester academic performance. The prototype interface presents these fields as the student's most recently completed semester for easier local data collection. Local validation is required before operational use across different semester stages.")
     st.write('This is a numerical normalization for interface compatibility and does not imply equivalence between Portuguese and Bangladeshi grading systems.')
     st.markdown('### Local data collection plan'); st.write('A future Google Form can collect the same 11 user fields, plus research-only Current Semester / Academic Year and an Anonymous Follow-Up ID. Form responses without later outcome labels cannot immediately retrain a supervised model. Future actual outcomes must be linked using the anonymous ID before local validation or retraining.')
+    st.write('The machine-learning model estimates dropout risk. A separate rule-based support layer summarizes relevant academic and financial warning indicators from the entered information and suggests possible institutional follow-up. These indicators are not causal explanations of dropout.')
     st.markdown('### Limitations'); st.markdown('- Training data originate from Portuguese higher education.\n- The model has not yet been externally validated on Bangladeshi university students.\n- The source training data use first-semester academic performance.\n- Local longitudinal outcome data are required before local retraining.\n- Predictions are statistical estimates, not certainties.\n- Outputs should support, not replace, human judgement.')
 def style()->None:
     st.markdown('''<style>.block-container{max-width:1120px;padding-top:2.2rem;padding-bottom:3rem}h1{color:#18384f;letter-spacing:-.025em}h2,h3{color:#24566b}div[data-testid="stMetric"]{background:#f3f7f9;border:1px solid #d9e6ea;border-radius:14px;padding:1rem}.workflow{display:flex;flex-wrap:wrap;gap:.65rem;align-items:center;margin:1.5rem 0 2rem}.workflow span{background:#edf6f7;color:#174d5b;border:1px solid #cfe3e7;padding:.65rem .8rem;border-radius:10px;font-weight:650}.result{border-radius:16px;padding:1.25rem 1.5rem;margin:.5rem 0 1rem;border:1px solid}.result strong{font-size:2.6rem}.result h2{margin:.2rem 0}.result.elevated{background:#fff7ed;border-color:#f2c994}.result.lower{background:#edf8f2;border-color:#b9dfc8}@media(max-width:700px){.workflow b{display:none}}</style>''',unsafe_allow_html=True)

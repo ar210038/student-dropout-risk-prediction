@@ -7,7 +7,7 @@ import pandas as pd
 from streamlit.testing.v1 import AppTest
 from app import (FORM_FIELDS,METADATA_PATH,MODEL_PATH,OCCUPATIONS,OCCUPATION_BY_LABEL,
     THRESHOLD,dropout_probability,make_input_frame,risk_label,
-    semester_gpa_to_source_grade,validate_inputs)
+    semester_gpa_to_source_grade,support_guidance,validate_inputs)
 from src.uci_sem1_features import normalize_previous_grade
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -85,3 +85,63 @@ def test_three_pages_render_without_exceptions_and_form_has_11_widgets():
     app.radio[0].set_value('About Project').run()
     assert any('Anonymous Follow-Up ID' in item.value for item in app.markdown)
     assert any('first-semester academic performance' in item.value for item in app.markdown)
+def guidance(**overrides):
+    values=dict(semester_gpa=3.5,enrolled=6,evaluations=6,passed=6,debtor=False,
+                tuition_up_to_date=True,scholarship=True,previous_gpa=4.0)
+    values.update(overrides)
+    return support_guidance(**values)
+
+def test_elevated_academic_guidance():
+    indicators,supports=guidance(semester_gpa=1.85,enrolled=7,evaluations=5,passed=3)
+    assert indicators[0]=='Low recent academic performance — Semester GPA: 1.85 / 4.00'
+    assert 'Low course completion — 3 of 7 courses passed' in indicators
+    assert 'Academic advising' in supports and 'Course-specific academic support' in supports
+
+def test_elevated_financial_guidance():
+    indicators,supports=guidance(debtor=True,tuition_up_to_date=False,scholarship=False)
+    assert 'Tuition fees are not currently up to date' in indicators
+    assert 'Outstanding debtor status was reported' in indicators
+    assert 'Financial-aid review' in supports and 'Financial counselling' in supports
+
+def test_multiple_problems_are_prioritized_and_capped():
+    indicators,supports=guidance(semester_gpa=1.2,enrolled=8,evaluations=1,passed=1,
+                                 debtor=True,tuition_up_to_date=False,scholarship=False,
+                                 previous_gpa=2.5)
+    assert len(indicators)==3
+    assert len(supports)<=4
+    assert indicators[0].startswith('Low recent academic performance')
+
+def test_lower_risk_profile_has_no_rule_warnings():
+    indicators,supports=guidance()
+    assert indicators==[] and supports==[]
+    assert risk_label(0.2)=='Lower Estimated Risk'
+
+def test_zero_enrolled_is_safe():
+    indicators,supports=guidance(enrolled=0,evaluations=0,passed=0)
+    assert 'No course enrollment was reported' in indicators
+    assert supports
+
+def test_parent_occupations_and_age_are_never_explanation_reasons():
+    indicators,_=guidance(semester_gpa=1.0,enrolled=6,evaluations=1,passed=1)
+    text=' '.join(indicators).lower()
+    assert 'mother' not in text and 'father' not in text and 'occupation' not in text and 'age' not in text
+def test_result_panels_show_guidance_only_for_elevated_risk():
+    app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
+    app.radio[0].set_value('Assess Dropout Risk').run()
+    numbers={item.label:item for item in app.number_input}
+    selections={item.label:item for item in app.selectbox}
+    numbers['HSC / Equivalent GPA'].set_value(2.5)
+    numbers['Age at Enrollment'].set_value(70)
+    numbers['Courses Enrolled'].set_value(7)
+    numbers['Evaluations Completed'].set_value(1)
+    numbers['Courses Passed'].set_value(0)
+    numbers['Semester GPA'].set_value(0.0)
+    selections['Scholarship Holder'].set_value('No')
+    selections['Debtor'].set_value('Yes')
+    selections['Tuition Fees Up to Date'].set_value('No')
+    app.button[0].click().run()
+    rendered=' '.join(item.value for item in app.markdown)
+    assert 'Elevated Estimated Risk' in rendered
+    assert 'Key Risk Indicators' in rendered
+    assert 'Possible Institute Support' in rendered
+    assert 'confirmed causes of dropout' in ' '.join(item.value for item in app.caption)
