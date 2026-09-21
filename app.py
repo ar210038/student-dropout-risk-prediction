@@ -134,88 +134,123 @@ def template_csv()->bytes:
     example={ID_COLUMN:'EXAMPLE-001',SEMESTER_COLUMN:'3rd Semester','HSC / Equivalent GPA':4.20,'Age at Enrollment':19,"Mother's Occupation":'Administrative staff',"Father's Occupation":'Unskilled workers','Scholarship Holder':'No','Debtor':'No','Tuition Fees Up to Date':'Yes','Courses Enrolled':6,'Evaluations Completed':6,'Courses Passed':5,'Semester GPA':3.25}
     return pd.DataFrame([example],columns=BATCH_COLUMNS).to_csv(index=False).encode('utf-8')
 
-def cards(items:list[tuple[str,str]])->None:
-    for column,(value,label) in zip(st.columns(len(items)),items):
-        column.markdown(f'<div class="metric-card"><strong>{value}</strong><span>{label}</span></div>',unsafe_allow_html=True)
+def metric_cards(items:list[tuple[str,str,str]])->None:
+    for column,(value,label,icon) in zip(st.columns(len(items)),items):
+        column.markdown(f'<div class="metric-card"><div class="metric-icon">{icon}</div><strong>{value}</strong><span>{label}</span></div>',unsafe_allow_html=True)
+
+def section_heading(title:str,eyebrow:str='')->None:
+    eyebrow_html=f'<span>{eyebrow}</span>' if eyebrow else ''
+    st.markdown(f'<div class="section-heading">{eyebrow_html}<h3>{title}</h3></div>',unsafe_allow_html=True)
+
+def info_card(title:str,body:str)->None:
+    st.markdown(f'<div class="info-card"><h3>{title}</h3><div>{body}</div></div>',unsafe_allow_html=True)
 
 def navigate(page:str)->None: st.session_state.page=page
 
 def dashboard()->None:
-    st.title('Student Dropout Early Warning System'); st.subheader('Machine Learning-Based Early Identification for Student Support')
-    st.write('Identify potentially at-risk students and support them earlier using academic, financial, and background information.')
-    cards([('Random Forest','ML Model'),('11','Student Factors'),('93.8%','ROC-AUC'),('87.7%','Recall')])
-    st.markdown('<div class="workflow"><span>Student Data</span><b>→</b><span>Risk Analysis</span><b>→</b><span>Warning Indicators</span><b>→</b><span>Early Support</span></div>',unsafe_allow_html=True)
-    c1,c2=st.columns(2)
-    if c1.button('Assess One Student',type='primary',use_container_width=True): st.session_state.page='Individual Assessment'; st.rerun()
-    if c2.button('Analyze a Student Batch',use_container_width=True): st.session_state.page='Batch Analysis'; st.rerun()
+    st.markdown('''<div class="hero"><div class="hero-kicker">ACADEMIC INTELLIGENCE · EARLY WARNING</div><h1>Student Dropout Early Warning System</h1><h2>AI-powered student support dashboard for early academic intervention</h2><p>Identify potentially at-risk students and coordinate earlier support using academic, financial, and background information.</p></div>''',unsafe_allow_html=True)
+    metric_cards([('Random Forest','ML Model','◈'),('11','Student Factors','◆'),('93.8%','ROC-AUC','◉'),('87.7%','Recall','↗')])
+    st.markdown('<div class="process-strip"><span>Student Data</span><b>→</b><span>Risk Analysis</span><b>→</b><span>Warning Indicators</span><b>→</b><span>Support Action</span></div>',unsafe_allow_html=True)
+    c1,c2=st.columns(2,gap='large')
+    c1.markdown('<div class="action-copy"><b>Individual screening</b><span>Review one student with an immediate support summary.</span></div>',unsafe_allow_html=True)
+    c1.button('Assess One Student',type='primary',use_container_width=True,on_click=navigate,args=('Individual Assessment',))
+    c2.markdown('<div class="action-copy"><b>Department overview</b><span>Upload a cohort file and identify support priorities.</span></div>',unsafe_allow_html=True)
+    c2.button('Analyze a Student Batch',use_container_width=True,on_click=navigate,args=('Batch Analysis',))
 
 def render_result(result:dict[str,Any],student_id:str='Individual Assessment')->None:
-    elevated=result['risk_level'].startswith('Elevated')
-    st.markdown(f'<div class="result {"elevated" if elevated else "lower"}"><span>Estimated Dropout Risk</span><strong>{result["probability"]:.1%}</strong><h2>{result["risk_level"].upper()}</h2></div>',unsafe_allow_html=True)
+    elevated=result['risk_level'].startswith('Elevated'); status='elevated' if elevated else 'lower'; width=max(2,min(100,result['probability']*100))
+    st.markdown(f'''<div class="result-panel {status}"><div class="result-top"><div><span class="result-label">ESTIMATED DROPOUT RISK</span><strong>{result["probability"]:.1%}</strong></div><div class="status-badge">{result["risk_level"]}</div></div><div class="risk-track"><div style="width:{width:.1f}%"></div></div><div class="scale"><span>Lower risk</span><span>Threshold 48%</span><span>Higher risk</span></div></div>''',unsafe_allow_html=True)
     if elevated:
-        st.markdown('#### Key Risk Indicators'); st.caption('These indicators are based on the entered information and are not confirmed causes of dropout.')
-        st.markdown('\n'.join(f'- {item}' for item in result['indicators']) if result['indicators'] else '- No single actionable warning met the rule thresholds.')
-        st.markdown('#### Possible Institute Support'); st.markdown('\n'.join(f'- {item}' for item in result['supports']) if result['supports'] else '- Continue an individual academic-support review')
-    else: st.success('No major immediate warning indicators were identified from the entered information. Continue normal academic monitoring.')
+        section_heading('Key Risk Indicators','INTERPRETATION')
+        st.caption('These indicators are based on the entered information and are not confirmed causes of dropout.')
+        indicators=result['indicators'] or ['No single actionable warning met the rule thresholds.']
+        st.markdown('<div class="chip-grid">'+''.join(f'<div class="indicator-chip"><i>!</i><span>{item}</span></div>' for item in indicators)+'</div>',unsafe_allow_html=True)
+        section_heading('Possible Institute Support','RECOMMENDATIONS')
+        supports=result['supports'] or ['Continue an individual academic-support review']
+        st.markdown('<div class="support-grid">'+''.join(f'<div class="support-card"><i>→</i><span>{item}</span></div>' for item in supports)+'</div>',unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="lower-note">✓ No major immediate warning indicators were identified. Continue normal academic monitoring.</div>',unsafe_allow_html=True)
     report='\n'.join([f'Student: {student_id}',f'Estimated Dropout Risk: {result["probability"]:.1%}',f'Risk Level: {result["risk_level"]}','Key Risk Indicators: '+('; '.join(result['indicators']) or 'None'),'Suggested Institute Support: '+('; '.join(result['supports']) or 'Normal academic monitoring')])
-    st.download_button('Download Assessment',report,file_name='student_assessment.txt',mime='text/plain')
+    st.download_button('↓ Download Assessment',report,file_name='student_assessment.txt',mime='text/plain')
 
 def individual_assessment(artifact:dict[str,Any])->None:
-    st.title('Individual Assessment'); st.caption("Use information from the student's most recent completed semester.")
+    st.markdown('<div class="page-header"><span>INDIVIDUAL SCREENING</span><h1>Individual Assessment</h1><p>Use information from the student’s most recently completed semester.</p></div>',unsafe_allow_html=True)
     with st.form('assessment_form'):
-        student_id=st.text_input('Anonymous Student ID (optional)')
-        st.markdown('### Student Background'); c1,c2=st.columns(2); previous=c1.number_input('HSC / Equivalent GPA',2.50,5.00,3.50,step=0.01); age=c2.number_input('Age at Enrollment',17,70,19)
-        st.markdown('### Family Background'); c1,c2=st.columns(2); labels=list(OCCUPATION_BY_LABEL); mother=c1.selectbox("Mother’s Occupation",labels,index=labels.index('Unskilled workers')); father=c2.selectbox("Father’s Occupation",labels,index=labels.index('Unskilled workers'))
-        st.markdown('### Financial Status'); c1,c2,c3=st.columns(3); scholarship=c1.selectbox('Scholarship Holder',['No','Yes']); debtor=c2.selectbox('Debtor',['No','Yes']); tuition=c3.selectbox('Tuition Fees Up to Date',['No','Yes'])
-        st.markdown('### Recent Semester Performance'); c1,c2,c3,c4=st.columns(4); enrolled=c1.number_input('Courses Enrolled',0,26,6); evaluations=c2.number_input('Evaluations Completed',0,45,8); passed=c3.number_input('Courses Passed',0,26,5); semester_gpa=c4.number_input('Semester GPA',0.00,4.00,3.00,step=0.01)
-        submitted=st.form_submit_button('Estimate Dropout Risk',type='primary',use_container_width=True)
+        student_id=st.text_input('Anonymous Student ID (optional)',placeholder='e.g. STUDENT-001')
+        section_heading('Student Background','01'); c1,c2=st.columns(2); previous=c1.number_input('HSC / Equivalent GPA',2.50,5.00,3.50,step=0.01); age=c2.number_input('Age at Enrollment',17,70,19)
+        section_heading('Family Background','02'); c1,c2=st.columns(2); labels=list(OCCUPATION_BY_LABEL); mother=c1.selectbox("Mother’s Occupation",labels,index=labels.index('Unskilled workers')); father=c2.selectbox("Father’s Occupation",labels,index=labels.index('Unskilled workers'))
+        section_heading('Financial Status','03'); c1,c2,c3=st.columns(3); scholarship=c1.selectbox('Scholarship Holder',['No','Yes']); debtor=c2.selectbox('Debtor',['No','Yes']); tuition=c3.selectbox('Tuition Fees Up to Date',['No','Yes'])
+        section_heading('Recent Semester Performance','04'); c1,c2,c3,c4=st.columns(4); enrolled=c1.number_input('Courses Enrolled',0,26,6); evaluations=c2.number_input('Evaluations Completed',0,45,8); passed=c3.number_input('Courses Passed',0,26,5); semester_gpa=c4.number_input('Semester GPA',0.00,4.00,3.00,step=0.01)
+        submitted=st.form_submit_button('Run Risk Assessment',type='primary',use_container_width=True)
     if submitted:
         record={'HSC / Equivalent GPA':previous,'Age at Enrollment':age,"Mother's Occupation":mother,"Father's Occupation":father,'Scholarship Holder':scholarship,'Debtor':debtor,'Tuition Fees Up to Date':tuition,'Courses Enrolled':enrolled,'Evaluations Completed':evaluations,'Courses Passed':passed,'Semester GPA':semester_gpa}
         if passed>enrolled: st.error('Courses Passed cannot be greater than Courses Enrolled.'); return
         render_result(predict_student(artifact,record),student_id.strip() or 'Individual Assessment')
 
+def dark_bar(data:pd.DataFrame,color:str='#35d6ff')->None:
+    chart_data=data.reset_index(); category,value=chart_data.columns[:2]
+    spec={'mark':{'type':'bar','cornerRadiusEnd':8,'color':color},'encoding':{'x':{'field':category,'type':'nominal','sort':'-y','axis':{'labelAngle':0,'title':None}},'y':{'field':value,'type':'quantitative','axis':{'title':None}},'tooltip':[{'field':category},{'field':value}]},'height':280,'config':{'background':'transparent','view':{'stroke':None},'axis':{'labelColor':'#a9bbcc','gridColor':'#26384e','domainColor':'#40556c','tickColor':'#40556c'}}}
+    st.vega_lite_chart(chart_data,spec,use_container_width=True)
+
 def batch_analysis(artifact:dict[str,Any])->None:
-    st.title('Batch Analysis'); st.write('Upload a Google Forms/Sheets CSV to assess multiple students with the same model and threshold.')
-    st.info('For demonstration and research use, avoid uploading names, phone numbers, email addresses, or other unnecessary personally identifiable information. Use anonymous student IDs.')
-    st.download_button('Download CSV Template',template_csv(),'student_batch_template.csv','text/csv')
-    with st.expander('Using Google Forms'):
-        st.markdown('1. Create a Google Form with the same student questions.\n2. Store responses in Google Sheets.\n3. Export the Sheet as CSV.\n4. Upload the CSV here.\n5. Analyze all students together.\n\nDirect Google Sheets synchronization can be considered as future work.')
-    uploaded=st.file_uploader('Upload student CSV',type='csv')
+    st.markdown('<div class="page-header"><span>COHORT INTELLIGENCE</span><h1>Batch Analysis</h1><p>Analyze a CSV or Excel cohort using the same validated model and support rules.</p></div>',unsafe_allow_html=True)
+    st.markdown('<div class="privacy-note"><b>Privacy first.</b> Use anonymous student IDs. Do not upload names, phone numbers, email addresses, or unnecessary personal information. Files are processed in memory only.</div>',unsafe_allow_html=True)
+    c1,c2=st.columns([1,2]); c1.download_button('↓ Download CSV Template',template_csv(),'student_batch_template.csv','text/csv',use_container_width=True)
+    with c2.expander('Using Google Forms'):
+        st.markdown('Create the same questions → store responses in Google Sheets → export CSV → upload here. Direct Google Sheets synchronization is future work.')
+    st.markdown('<div class="upload-heading"><span>UPLOAD COHORT FILE</span><b>CSV or Excel · validated before analysis</b></div>',unsafe_allow_html=True)
+    uploaded=st.file_uploader('Upload student data',type=['csv','xlsx'],label_visibility='collapsed')
     if uploaded is None: return
-    try: frame=pd.read_csv(uploaded)
-    except Exception as error: st.error(f'Could not read CSV: {error}'); return
+    try: frame=pd.read_excel(uploaded) if uploaded.name.lower().endswith('.xlsx') else pd.read_csv(uploaded)
+    except Exception as error: st.error(f'Could not read file: {error}'); return
     errors=validate_batch_dataframe(frame)
     if not errors.empty:
         st.error('The file contains validation problems. No rows were analyzed.'); st.dataframe(errors,use_container_width=True,hide_index=True); return
     results=analyze_batch(artifact,frame); elevated=results['Risk Level'].str.startswith('Elevated')
-    cards([(str(len(results)),'Total Students'),(str(int(elevated.sum())),'Elevated Risk'),(str(int((~elevated).sum())),'Lower Risk'),(f'{results["Estimated Dropout Risk"].mean():.1%}','Average Estimated Risk')])
-    st.markdown('### Risk Distribution'); distribution=results['Risk Level'].value_counts().rename_axis('Risk Level').to_frame('Students'); st.bar_chart(distribution)
-    elevated_indicators=results.loc[elevated,'Key Risk Indicators'].str.split(' | ',regex=False).explode(); elevated_indicators=elevated_indicators[elevated_indicators!='-']
-    st.markdown('### Most Common Warning Indicators'); st.bar_chart(elevated_indicators.value_counts().head(8).rename_axis('Indicator').to_frame('Students'))
-    st.markdown('### Student Results'); c1,c2,c3=st.columns(3); risk_filter=c1.selectbox('Risk Level',['All','Elevated','Lower']); semesters=['All']+sorted(x for x in results[SEMESTER_COLUMN].dropna().astype(str).unique() if x); semester_filter=c2.selectbox('Semester',semesters); search=c3.text_input('Search Anonymous Follow-Up ID')
+    metric_cards([(str(len(results)),'Total Students','◎'),(str(int(elevated.sum())),'Elevated Risk','▲'),(str(int((~elevated).sum())),'Lower Risk','✓'),(f'{results["Estimated Dropout Risk"].mean():.1%}','Average Estimated Risk','◉')])
+    c1,c2=st.columns(2,gap='large')
+    with c1:
+        section_heading('Risk Distribution','COHORT OVERVIEW'); distribution=results['Risk Level'].value_counts().rename_axis('Risk Level').to_frame('Students'); dark_bar(distribution,'#7c6cff')
+    with c2:
+        section_heading('Most Common Warning Indicators','SUPPORT PRIORITIES'); indicators=results.loc[elevated,'Key Risk Indicators'].str.split(' | ',regex=False).explode(); indicators=indicators[indicators!='-']; dark_bar(indicators.value_counts().head(8).rename_axis('Indicator').to_frame('Students'),'#35d6ff')
+    section_heading('Student Results','FILTER & REVIEW'); c1,c2,c3=st.columns(3); risk_filter=c1.selectbox('Risk Level',['All','Elevated','Lower']); semesters=['All']+sorted(x for x in results[SEMESTER_COLUMN].dropna().astype(str).unique() if x); semester_filter=c2.selectbox('Semester',semesters); search=c3.text_input('Search Anonymous Follow-Up ID',placeholder='Search ID')
     filtered=results
     if risk_filter!='All': filtered=filtered[filtered['Risk Level'].str.startswith(risk_filter)]
     if semester_filter!='All': filtered=filtered[filtered[SEMESTER_COLUMN].astype(str)==semester_filter]
     if search: filtered=filtered[filtered[ID_COLUMN].astype(str).str.contains(search,case=False,na=False)]
-    display=filtered[[ID_COLUMN,SEMESTER_COLUMN,'Estimated Dropout Risk','Risk Level','Main Indicator']].copy(); display['Estimated Dropout Risk']=display['Estimated Dropout Risk'].map(lambda x:f'{x:.1%}'); st.dataframe(display,use_container_width=True,hide_index=True)
-    st.download_button('Download Analysis Results CSV',export_results(results),'student_batch_analysis.csv','text/csv')
+    display=filtered[[ID_COLUMN,SEMESTER_COLUMN,'Estimated Dropout Risk','Risk Level','Main Indicator']].copy(); display['Estimated Dropout Risk']=display['Estimated Dropout Risk'].map(lambda x:f'{x:.1%}')
+    styled=display.style.apply(lambda row:['background-color: rgba(255,110,92,.10)' if str(row['Risk Level']).startswith('Elevated') else '' for _ in row],axis=1)
+    st.dataframe(styled,use_container_width=True,hide_index=True); st.download_button('↓ Download Analysis Results CSV',export_results(results),'student_batch_analysis.csv','text/csv',use_container_width=True)
 
 def about()->None:
-    st.title('About Project')
-    st.markdown('### Purpose'); st.write('An early-warning support tool for identifying students who may benefit from timely academic or financial follow-up.')
-    st.markdown('### Dataset'); st.write("UCI “Predict Students’ Dropout and Academic Success”: 4,424 original records; 3,630 resolved outcomes used (2,209 graduate, 1,421 dropout); 794 enrolled records excluded.")
-    st.markdown('### Model'); st.write('Random Forest using 11 student factors and a decision threshold of 0.48.')
-    st.markdown('### Performance'); st.write('Accuracy 87.6% · Precision 81.9% · Recall 87.7% · F1 84.7% · ROC-AUC 93.8% · PR-AUC 92.9%')
-    st.markdown('### How Risk Indicators Work'); st.write('The machine-learning model estimates dropout risk. A separate rule-based support layer summarizes relevant academic and financial warning indicators and suggests possible institutional follow-up. These indicators are not causal explanations of dropout.')
-    st.markdown('### Local Data Collection'); st.write('A campus Google Form can collect the same student information used by the system. These records can be used to study local patterns. Once actual academic outcomes are later linked to anonymous records, the data may be used for local validation and future model retraining.')
-    st.markdown('### Limitations'); st.markdown('- Training data originate from Portuguese higher education and have not been externally validated in Bangladesh.\n- Source academic variables describe first-semester performance; broader semester use requires local validation.\n- Local longitudinal outcomes are required before retraining.\n- Predictions are estimates and should support, not replace, human judgement.')
+    st.markdown('<div class="page-header"><span>PROJECT OVERVIEW</span><h1>About Project</h1><p>A transparent academic prototype connecting risk estimation with practical student support.</p></div>',unsafe_allow_html=True)
+    st.markdown('<div class="architecture"><span>Student Inputs</span><b>→</b><span>Random Forest</span><b>→</b><span>Risk Estimate</span><b>→</b><span>Support Guidance</span></div>',unsafe_allow_html=True)
+    c1,c2=st.columns(2,gap='large')
+    with c1:
+        info_card('Purpose','Identify students who may benefit from timely academic or financial follow-up.')
+        info_card('Dataset','UCI Predict Students’ Dropout and Academic Success · 4,424 original records · 3,630 resolved outcomes.')
+        info_card('Model','Random Forest · 11 student factors · decision threshold 0.48.')
+    with c2:
+        info_card('Performance','Accuracy 87.6% · Precision 81.9% · Recall 87.7% · F1 84.7% · ROC-AUC 93.8% · PR-AUC 92.9%')
+        info_card('How Risk Indicators Work','A separate deterministic layer summarizes relevant academic and financial warnings. They are not causal explanations.')
+        info_card('Local Data Collection','Anonymous campus records can support local pattern analysis, later validation, and future retraining once outcomes are linked.')
+    info_card('Limitations','Training data originate from Portuguese higher education and are not externally validated in Bangladesh. Source academic variables describe first-semester performance. Local longitudinal outcomes are required before retraining. Predictions support—not replace—human judgement.')
 
 def style()->None:
-    st.markdown('''<style>:root{--navy:#102f4a;--blue:#1f6485}.stApp{background:#f7f9fb}.block-container{max-width:1180px;padding-top:2rem;padding-bottom:3rem}h1{color:var(--navy);letter-spacing:-.035em}h2,h3,h4{color:#194b68}.metric-card{background:white;border:1px solid #e0e8ee;border-radius:16px;padding:1.2rem;box-shadow:0 5px 18px rgba(16,47,74,.07);min-height:105px}.metric-card strong{display:block;color:var(--navy);font-size:1.75rem}.metric-card span{color:#627485}.workflow{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin:1.6rem 0}.workflow span{background:white;color:#174d69;border:1px solid #d7e4eb;padding:.75rem 1rem;border-radius:12px;font-weight:650;box-shadow:0 3px 12px rgba(16,47,74,.05)}.result{border-radius:18px;padding:1.4rem 1.6rem;margin:1rem 0;border:1px solid;box-shadow:0 5px 18px rgba(16,47,74,.07)}.result strong{display:block;font-size:2.8rem}.result h2{margin:.15rem 0}.result.elevated{background:#fff6ee;border-color:#efb47c}.result.elevated h2{color:#a53b21}.result.lower{background:#eef9f2;border-color:#addbbd}.result.lower h2{color:#176b3a}div[data-testid="stForm"],div[data-testid="stExpander"]{background:white;border-radius:16px;border-color:#e0e8ee}@media(max-width:700px){.workflow b{display:none}}</style>''',unsafe_allow_html=True)
+    st.markdown('''<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    :root{--bg:#07101e;--panel:#101d2e;--panel2:#0c1727;--line:rgba(133,174,214,.18);--cyan:#35d6ff;--violet:#8b7cff;--text:#f4f8fc;--muted:#91a5b9;--green:#38d996;--orange:#ff8a5b}
+    html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif}.stApp{background:radial-gradient(circle at 80% -10%,rgba(52,87,170,.22),transparent 34%),radial-gradient(circle at 10% 20%,rgba(26,185,210,.08),transparent 28%),var(--bg);color:var(--text)}
+    .block-container{max-width:1240px;padding:2.2rem 2.2rem 4rem}h1,h2,h3,h4,p,label{color:var(--text)}p,.stCaption{color:var(--muted)!important}.hero,.page-header{padding:2.2rem;border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,rgba(18,38,61,.92),rgba(11,24,42,.78));box-shadow:0 24px 70px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.04);margin-bottom:1.4rem}.hero h1,.page-header h1{font-size:clamp(2.1rem,4.2vw,3.7rem);line-height:1.05;letter-spacing:-.05em;margin:.5rem 0;color:white}.hero h2{font-size:clamp(1.05rem,2vw,1.45rem);font-weight:500;color:#b9d7e8}.hero p,.page-header p{max-width:820px;font-size:1.02rem;margin-bottom:0}.hero-kicker,.page-header>span,.section-heading>span,.upload-heading span{color:var(--cyan);font-size:.72rem;font-weight:800;letter-spacing:.16em}.metric-card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(19,35,55,.92),rgba(12,25,43,.82));border:1px solid var(--line);border-radius:18px;padding:1.2rem;box-shadow:0 15px 40px rgba(0,0,0,.22);min-height:130px;transition:.2s}.metric-card:hover{transform:translateY(-3px);border-color:rgba(53,214,255,.38)}.metric-card:after{content:'';position:absolute;width:90px;height:90px;border-radius:50%;background:var(--cyan);filter:blur(60px);opacity:.09;right:-20px;top:-20px}.metric-card strong{display:block;color:white;font-size:1.65rem;margin:.55rem 0 .25rem}.metric-card span{color:var(--muted);font-size:.85rem}.metric-icon{color:var(--cyan);font-size:1.15rem}.process-strip,.architecture{display:flex;align-items:center;justify-content:center;gap:.8rem;flex-wrap:wrap;margin:1.8rem 0;padding:1rem;border:1px solid var(--line);border-radius:16px;background:rgba(10,23,39,.72)}.process-strip span,.architecture span{color:#dcecf5;font-weight:650}.process-strip b,.architecture b{color:var(--cyan)}.action-copy{background:rgba(15,30,49,.75);border:1px solid var(--line);border-radius:16px;padding:1.1rem 1.2rem;margin-bottom:.7rem}.action-copy b,.action-copy span{display:block}.action-copy span{color:var(--muted);font-size:.85rem;margin-top:.25rem}
+    section[data-testid="stSidebar"]{background:linear-gradient(180deg,#091421,#07101c);border-right:1px solid var(--line)}section[data-testid="stSidebar"] h1{color:white;font-size:1.25rem}section[data-testid="stSidebar"] [role="radiogroup"] label{padding:.7rem .8rem;border-radius:10px;margin:.18rem 0;transition:.2s}section[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:rgba(53,214,255,.08)}
+    div[data-testid="stForm"],div[data-testid="stExpander"],div[data-testid="stFileUploader"]{background:rgba(12,25,43,.78);border:1px solid var(--line)!important;border-radius:20px;padding:1rem;box-shadow:0 16px 45px rgba(0,0,0,.18)}.section-heading{margin:1.3rem 0 .7rem}.section-heading h3{margin:.15rem 0;color:white;font-size:1.22rem}div[data-baseweb="input"]>div,div[data-baseweb="select"]>div{background:#0b1727!important;border-color:#30445b!important;color:white!important;border-radius:10px!important}input{color:white!important}.stButton>button,.stDownloadButton>button,.stFormSubmitButton>button{border-radius:11px!important;border:1px solid rgba(53,214,255,.3)!important;background:linear-gradient(135deg,#167da3,#635ad9)!important;color:white!important;font-weight:700!important;min-height:2.9rem;box-shadow:0 8px 24px rgba(31,131,175,.18);transition:.2s!important}.stButton>button:hover,.stDownloadButton>button:hover,.stFormSubmitButton>button:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(53,214,255,.22)}
+    .result-panel{border-radius:22px;padding:1.5rem;margin:1.5rem 0;border:1px solid var(--line);background:rgba(12,25,43,.86);box-shadow:0 18px 50px rgba(0,0,0,.25)}.result-top{display:flex;align-items:center;justify-content:space-between;gap:1rem}.result-label{display:block;color:var(--muted);font-size:.72rem;letter-spacing:.14em;font-weight:800}.result-panel strong{display:block;font-size:3.2rem;color:white}.status-badge{padding:.55rem .85rem;border-radius:999px;font-size:.78rem;font-weight:800;text-transform:uppercase}.elevated .status-badge{color:#ffd3c2;background:rgba(255,104,76,.16);border:1px solid rgba(255,104,76,.38)}.lower .status-badge{color:#adf4d1;background:rgba(56,217,150,.13);border:1px solid rgba(56,217,150,.34)}.risk-track{height:10px;background:#26364a;border-radius:99px;overflow:hidden;margin-top:1rem}.risk-track div{height:100%;background:linear-gradient(90deg,var(--cyan),var(--violet),var(--orange));border-radius:99px}.scale{display:flex;justify-content:space-between;color:#72879b;font-size:.7rem;margin-top:.4rem}.chip-grid,.support-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.7rem;margin:.7rem 0 1.4rem}.indicator-chip,.support-card{display:flex;gap:.7rem;align-items:flex-start;border:1px solid var(--line);background:rgba(14,29,48,.8);border-radius:13px;padding:.9rem;color:#dce8f1}.indicator-chip i{color:var(--orange);font-style:normal;font-weight:800}.support-card i{color:var(--cyan);font-style:normal}.lower-note,.privacy-note{border:1px solid rgba(56,217,150,.28);background:rgba(56,217,150,.08);color:#c7f5df;padding:1rem;border-radius:13px;margin:1rem 0}.privacy-note{border-color:var(--line);background:rgba(53,214,255,.06);color:#bed9e8}.upload-heading{display:flex;justify-content:space-between;align-items:center;margin:1rem 0 .5rem}.upload-heading b{color:var(--muted);font-size:.8rem}.info-card{background:linear-gradient(145deg,rgba(17,33,53,.88),rgba(10,23,39,.82));border:1px solid var(--line);border-radius:16px;padding:1.2rem;margin-bottom:1rem;box-shadow:0 14px 38px rgba(0,0,0,.17)}.info-card h3{margin:0 0 .55rem;color:white}.info-card div{color:var(--muted);line-height:1.65}[data-testid="stDataFrame"]{border:1px solid var(--line);border-radius:14px;overflow:hidden}[data-testid="stFileUploaderDropzone"]{background:#0b1727;border:1px dashed #36536d;border-radius:14px}[data-testid="stFileUploaderDropzone"] small{color:var(--muted)!important}[data-baseweb="popover"],[data-baseweb="menu"]{background:#0b1727!important;color:var(--text)!important}hr{border-color:var(--line)}
+    @media(max-width:760px){.block-container{padding:1.2rem}.hero,.page-header{padding:1.35rem}.result-top{align-items:flex-start;flex-direction:column}.process-strip b,.architecture b{display:none}.metric-card{min-height:105px}.upload-heading{align-items:flex-start;flex-direction:column;gap:.25rem}}
+    </style>''',unsafe_allow_html=True)
 
 def main()->None:
-    st.set_page_config(page_title='Student Dropout Early Warning System',page_icon='🎓',layout='wide'); style(); artifact=load_model_artifact()
-    pages=['Dashboard','Individual Assessment','Batch Analysis','About Project']; st.sidebar.title('Early Warning System'); page=st.sidebar.radio('Navigate',pages,key='page'); st.sidebar.caption('Local academic prototype')
+    st.set_page_config(page_title='Student Dropout Early Warning System',page_icon='🎓',layout='wide',initial_sidebar_state='expanded'); style(); artifact=load_model_artifact()
+    pages=['Dashboard','Individual Assessment','Batch Analysis','About Project']; st.sidebar.markdown('### ◈ Early Warning'); st.sidebar.caption('STUDENT SUCCESS INTELLIGENCE'); page=st.sidebar.radio('Navigate',pages,key='page',label_visibility='collapsed'); st.sidebar.markdown('---'); st.sidebar.caption('Local academic prototype · Model threshold 0.48')
     if page=='Dashboard': dashboard()
     elif page=='Individual Assessment': individual_assessment(artifact)
     elif page=='Batch Analysis': batch_analysis(artifact)

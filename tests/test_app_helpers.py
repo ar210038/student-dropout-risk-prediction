@@ -101,7 +101,9 @@ def test_four_pages_render_and_individual_form_has_11_model_widgets():
     expected={'Dashboard':'Student Dropout Early Warning System','Individual Assessment':'Individual Assessment','Batch Analysis':'Batch Analysis','About Project':'About Project'}
     assert list(app.radio[0].options)==list(expected)
     for page,title in expected.items():
-        app.radio[0].set_value(page).run(); assert not app.exception; assert title in [item.value for item in app.title]
+        app.radio[0].set_value(page).run(); assert not app.exception
+        rendered=' '.join([*(item.value for item in app.title),*(item.value for item in app.markdown)])
+        assert title.lower() in rendered.lower()
     app.radio[0].set_value('Individual Assessment').run()
     assert len(app.number_input)+len(app.selectbox)==11
     assert next(item for item in app.number_input if item.label=='Semester GPA').max==4.0
@@ -112,7 +114,7 @@ def test_elevated_result_panel_and_download_render():
     for label,value in [('HSC / Equivalent GPA',2.5),('Age at Enrollment',70),('Courses Enrolled',7),('Evaluations Completed',1),('Courses Passed',0),('Semester GPA',0.0)]: numbers[label].set_value(value)
     selections['Debtor'].set_value('Yes'); selections['Tuition Fees Up to Date'].set_value('No'); app.button[-1].click().run()
     rendered=' '.join(item.value for item in app.markdown)
-    assert 'ELEVATED ESTIMATED RISK' in rendered and 'Key Risk Indicators' in rendered and 'Possible Institute Support' in rendered
+    assert 'elevated estimated risk' in rendered.lower() and 'Key Risk Indicators' in rendered and 'Possible Institute Support' in rendered
     assert app.download_button
 def test_batch_page_processes_five_row_upload_and_renders_outputs():
     app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
@@ -123,3 +125,11 @@ def test_batch_page_processes_five_row_upload_and_renders_outputs():
     markdown=' '.join(item.value for item in app.markdown)
     assert 'Total Students' in markdown and 'Elevated Risk' in markdown and 'Average Estimated Risk' in markdown
     assert len(app.dataframe)>=1 and len(app.download_button)>=2
+def test_batch_page_accepts_excel_upload():
+    app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
+    app.radio[0].set_value('Batch Analysis').run()
+    buffer=pd.io.common.BytesIO()
+    pd.DataFrame([student(),student(**{ID_COLUMN:'ST002','Semester GPA':1.4,'Courses Passed':1})]).to_excel(buffer,index=False)
+    app.file_uploader[0].upload('students.xlsx',buffer.getvalue(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').run()
+    assert not app.exception and not app.error
+    assert app.dataframe and len(app.download_button)>=2
