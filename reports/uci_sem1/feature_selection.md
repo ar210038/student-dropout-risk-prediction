@@ -1,27 +1,11 @@
-# Feature Selection
+# Final Usability Feature Decision
 
-## Full leakage-safe pool
+The validated 12-input Random Forest was compared with an 11-input version using the same training partition and repeated cross-validation. The new form removes Admission Grade and replaces the raw 95–190 Previous Qualification Grade with a native 2.50–5.00 model input:
 
-The 18-field candidate pool was: Age at enrollment; Previous qualification grade; Admission grade; Gender; Daytime/evening attendance; Mother's and Father's occupation; Mother's and Father's qualification; Scholarship holder; Debtor; Tuition fees up to date; first-semester enrolled, evaluations, approved, grade, credited, and without-evaluation counts.
+`previous_academic_gpa_normalized = previous_qualification_grade / 190 × 5`
 
-Selection was performed using training data only. Repeated-CV stability, permutation importance, form clarity, redundancy, and timing were considered. No holdout metric was used to select fields.
+Examples: 190→5.00, 152→4.00, and 95→2.50. This is only a linear numerical normalization, not a statement that source grades are academically equivalent to Bangladesh HSC GPAs.
 
-## Full versus simplified
+Repeated-CV changes for the 11-input Random Forest were ROC-AUC −0.0001, PR-AUC −0.0005, precision −0.0028, recall −0.0004, and F1 −0.0016. These negligible changes support adopting the clearer form.
 
-| Logistic Regression form | Inputs | ROC-AUC | PR-AUC | Recall | F1 |
-|---|---:|---:|---:|---:|---:|
-| Full candidate | 18 | 0.9248 | 0.9208 | 0.8307 | 0.8390 |
-| Simplified | 12 | 0.9114 | 0.9031 | 0.8109 | 0.8261 |
-| Difference, simplified − full | −6 | −0.0133 | −0.0177 | −0.0198 | −0.0130 |
-
-The simplified form retains most discrimination while removing six lower-value or less practical inputs. This is a deliberate usability tradeoff, not a claim that omitted factors are irrelevant.
-
-## Derived Semester pass rate
-
-`Semester pass rate = first-semester approved units / first-semester enrolled units`. When enrolled units equal zero, the rate is defined as 0 to avoid division by zero. The website will ask for the two understandable counts and calculate the rate inside the saved pipeline.
-
-## Final model fields
-
-The model representation contains 11 direct fields plus Semester pass rate. The actual proposed form has 12 entries because Approved units is entered to calculate the derived rate.
-
-Training-set permutation importance ranked the associated raw form fields approximately as follows: Approved units, Enrolled units, Tuition fees up to date, Semester grade, Scholarship holder, Evaluations completed, Age, Father's occupation, Mother's occupation, Admission grade, Previous grade, and Debtor. These fields are associated with dropout prediction; they do not cause dropout.
+The 11 visible fields are HSC / Equivalent GPA, Age at Enrollment, both parent occupations, Scholarship Holder, Debtor, Tuition Fees Up to Date, Courses Enrolled, Evaluations Completed, Courses Passed, and Average Semester Grade. Semester pass rate is derived safely as Passed/Enrolled, with zero used when Enrolled is zero.

@@ -25,20 +25,21 @@ The project uses the UCI Machine Learning Repository dataset **Predict Students'
 
 Dropout prevalence is 39.15%.
 
-## Final 12-input form
+## Final 11-input form
 
-1. Age at Enrollment
-2. Previous Academic Grade
-3. Admission Grade
-4. Mother's Occupation
-5. Father's Occupation
-6. Scholarship Holder
-7. Debtor
-8. Tuition Fees Up to Date
-9. Courses Enrolled
-10. Evaluations Completed
-11. Courses Passed
-12. Average Semester Grade
+1. HSC / Equivalent GPA
+2. Age at Enrollment
+3. Mother's Occupation
+4. Father's Occupation
+5. Scholarship Holder
+6. Debtor
+7. Tuition Fees Up to Date
+8. Courses Enrolled
+9. Evaluations Completed
+10. Courses Passed
+11. Average Semester Grade
+
+Admission Grade was removed. The source Previous Qualification Grade is normalized during training as `source grade / 190 × 5` and renamed `previous_academic_gpa_normalized`. Its exact observed support is 2.50–5.00, which becomes the website's HSC / Equivalent GPA range. This is a numerical scale normalization only; it does not claim academic equivalence between national grading systems.
 
 Occupation codes are presented as documented readable labels. Semester pass rate is calculated inside the pipeline as `Courses Passed / Courses Enrolled`; zero enrolled courses produces a rate of zero.
 
@@ -50,16 +51,16 @@ The selected model is **Random Forest**, with a locked threshold of **0.48**.
 
 | Held-out metric | Result |
 |---|---:|
-| Accuracy | 88.3% |
-| Balanced accuracy | 88.1% |
-| Precision | 83.5% |
-| Recall | 87.3% |
-| F1 | 85.4% |
-| ROC-AUC | 93.9% |
-| PR-AUC | 93.0% |
-| Brier score | 0.0967 |
+| Accuracy | 87.6% |
+| Balanced accuracy | 87.6% |
+| Precision | 81.9% |
+| Recall | 87.7% |
+| F1 | 84.7% |
+| ROC-AUC | 93.8% |
+| PR-AUC | 92.9% |
+| Brier score | 0.0997 |
 
-Confusion matrix: 393 correctly identified graduates, 49 false early warnings, 36 missed dropout cases, and 248 correctly identified dropout cases.
+Confusion matrix: 387 correctly identified graduates, 55 false early warnings, 35 missed dropout cases, and 249 correctly identified dropout cases. The same holdout had been consulted in earlier project iterations, so these results are a final project benchmark rather than pristine external validation.
 
 ## Streamlit interface
 

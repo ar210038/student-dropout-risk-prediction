@@ -6,33 +6,34 @@ Student completes Semester 1 → department enters available information → sav
 
 The future application must load `models/uci_sem1/dropout_early_warning_model.joblib`; it must not retrain. Migration is not part of this round.
 
-## Exact 12 fields
+## Exact 11 fields
 
 ### Student background
 
-1. Age at Enrollment
-2. Previous Academic Grade
-3. Admission Grade
+1. HSC / Equivalent GPA (2.50–5.00)
+2. Age at Enrollment
 
 ### Family background
 
-4. Mother's Occupation
-5. Father's Occupation
+3. Mother's Occupation
+4. Father's Occupation
 
 ### Financial status
 
-6. Scholarship Holder
-7. Debtor
-8. Tuition Fees Up to Date
+5. Scholarship Holder
+6. Debtor
+7. Tuition Fees Up to Date
 
 ### First-semester performance
 
-9. Courses Enrolled
-10. Evaluations Completed
-11. Courses Passed
-12. Average Semester Grade
+8. Courses Enrolled
+9. Evaluations Completed
+10. Courses Passed
+11. Average Semester Grade
 
-Courses Passed and Courses Enrolled are converted internally to Semester pass rate. Parent occupation codes must be rendered with the official UCI occupation descriptions already preserved in the archived UCI interface; raw numeric codes must never be shown.
+The source Previous Qualification Grade is normalized during training with `grade / 190 × 5`; it is not converted in the frontend. This aligns numerical scales only and does not claim cross-country academic equivalence. Admission Grade is excluded.
+
+Courses Passed and Courses Enrolled are converted internally to Semester pass rate. Parent occupation codes must be rendered with the official UCI occupation descriptions; raw numeric codes must never be shown.
 
 ## Result wording
 

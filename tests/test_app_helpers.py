@@ -6,16 +6,17 @@ import pandas as pd
 from streamlit.testing.v1 import AppTest
 from app import (FORM_FIELDS,METADATA_PATH,MODEL_PATH,OCCUPATIONS,OCCUPATION_BY_LABEL,
     RESULTS_PATH,THRESHOLD,dropout_probability,make_input_frame,risk_label,validate_inputs)
+from src.uci_sem1_features import normalize_previous_grade
 
 ROOT=Path(__file__).resolve().parents[1]
 
 def sample_values(**overrides):
-    values={'Age at enrollment':19,'Previous qualification (grade)':130.0,'Admission grade':130.0,"Mother's occupation":9,"Father's occupation":9,'Scholarship holder':0,'Debtor':0,'Tuition fees up to date':1,'Curricular units 1st sem (enrolled)':6,'Curricular units 1st sem (evaluations)':8,'Curricular units 1st sem (approved)':5,'Curricular units 1st sem (grade)':12.0}
+    values={'previous_academic_gpa_normalized':3.5,'Age at enrollment':19,"Mother's occupation":9,"Father's occupation":9,'Scholarship holder':0,'Debtor':0,'Tuition fees up to date':1,'Curricular units 1st sem (enrolled)':6,'Curricular units 1st sem (evaluations)':8,'Curricular units 1st sem (approved)':5,'Curricular units 1st sem (grade)':12.0}
     values.update(overrides); return values
 
 def test_exactly_twelve_fields_and_no_banned_inputs():
-    assert len(FORM_FIELDS)==12
-    banned=['2nd sem','Application mode','Application order','Course','Nacionality','Unemployment rate','Inflation rate','GDP',"Mother's qualification","Father's qualification"]
+    assert len(FORM_FIELDS)==11
+    banned=['2nd sem','Application mode','Application order','Course','Nacionality','Unemployment rate','Inflation rate','GDP',"Mother's qualification","Father's qualification",'Admission grade','Previous qualification (grade)']
     assert all(not any(term.lower() in field.lower() for term in banned) for field in FORM_FIELDS)
 
 def test_occupation_labels_round_trip_without_raw_display_codes():
@@ -39,19 +40,20 @@ def test_both_result_paths():
     assert risk_label(0.48)=='Elevated Estimated Risk'
     artifact=joblib.load(MODEL_PATH)
     raw=pd.read_csv(ROOT/'data'/'student_dropout.csv',sep=';'); raw.columns=raw.columns.str.strip()
+    raw['previous_academic_gpa_normalized']=normalize_previous_grade(raw['Previous qualification (grade)'])
     probabilities=artifact['pipeline'].predict_proba(raw[FORM_FIELDS])[:,list(artifact['pipeline'].classes_).index(1)]
     assert risk_label(float(probabilities.min()))=='Lower Estimated Risk'
     assert risk_label(float(probabilities.max()))=='Elevated Estimated Risk'
 
 def test_metrics_match_locked_results():
     r=json.loads(RESULTS_PATH.read_text(encoding='utf-8'))['test_metrics']
-    assert round(r['precision'],4)==0.8350 and round(r['recall'],4)==0.8732
-    assert round(r['f1'],4)==0.8537 and round(r['roc_auc'],4)==0.9385
-    assert round(r['average_precision'],4)==0.9300 and round(r['brier_score'],4)==0.0967
+    assert round(r['precision'],4)==0.8191 and round(r['recall'],4)==0.8768
+    assert round(r['f1'],4)==0.8469 and round(r['roc_auc'],4)==0.9378
+    assert round(r['average_precision'],4)==0.9286 and round(r['brier_score'],4)==0.0997
 
 def test_active_source_has_no_old_profile_ui_or_deterministic_claim():
     source=(ROOT/'app.py').read_text(encoding='utf-8').lower()
-    banned=['k-means','student profile explorer','profile 1','profile 2','silhouette','davies-bouldin','clustering pca','will drop out']
+    banned=['k-means','student profile explorer','profile 1','profile 2','silhouette','davies-bouldin','clustering pca','will drop out','admission grade']
     assert all(term not in source for term in banned)
 
 def test_all_pages_render_without_exceptions_and_form_has_12_widgets():
@@ -60,4 +62,6 @@ def test_all_pages_render_without_exceptions_and_form_has_12_widgets():
     for page,title in expected.items():
         app.radio[0].set_value(page).run(); assert not app.exception; assert title in [item.value for item in app.title]
     app.radio[0].set_value('Assess Dropout Risk').run()
-    assert len(app.number_input)+len(app.selectbox)==12
+    assert len(app.number_input)+len(app.selectbox)==11
+    gpa=next(item for item in app.number_input if item.label=='HSC / Equivalent GPA')
+    assert gpa.min==2.5 and gpa.max==5.0 and gpa.step==0.01
