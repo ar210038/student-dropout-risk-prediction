@@ -138,7 +138,7 @@ def cards(items:list[tuple[str,str]])->None:
     for column,(value,label) in zip(st.columns(len(items)),items):
         column.markdown(f'<div class="metric-card"><strong>{value}</strong><span>{label}</span></div>',unsafe_allow_html=True)
 
-def navigate(page:str)->None: st.session_state.page=page
+def navigate(page:str)->None: st.session_state['page_selector']=page
 
 def dashboard()->None:
     st.title('Student Dropout Early Warning System'); st.subheader('Machine Learning-Based Early Identification for Student Support')
@@ -146,8 +146,8 @@ def dashboard()->None:
     cards([('Random Forest','ML Model'),('11','Student Factors'),('93.8%','ROC-AUC'),('87.7%','Recall')])
     st.markdown('<div class="workflow"><span>Student Data</span><b>→</b><span>Risk Analysis</span><b>→</b><span>Warning Indicators</span><b>→</b><span>Early Support</span></div>',unsafe_allow_html=True)
     c1,c2=st.columns(2)
-    if c1.button('Assess One Student',type='primary',use_container_width=True): st.session_state.page='Individual Assessment'; st.rerun()
-    if c2.button('Analyze a Student Batch',use_container_width=True): st.session_state.page='Batch Analysis'; st.rerun()
+    c1.button('Assess One Student',type='primary',use_container_width=True,key='dashboard_assess_one',on_click=navigate,args=('Individual Assessment',))
+    c2.button('Analyze a Student Batch',use_container_width=True,key='dashboard_analyze_batch',on_click=navigate,args=('Batch Analysis',))
 
 def render_result(result:dict[str,Any],student_id:str='Individual Assessment')->None:
     elevated=result['risk_level'].startswith('Elevated')
@@ -215,7 +215,7 @@ def style()->None:
 
 def main()->None:
     st.set_page_config(page_title='Student Dropout Early Warning System',page_icon='🎓',layout='wide'); style(); artifact=load_model_artifact()
-    pages=['Dashboard','Individual Assessment','Batch Analysis','About Project']; st.sidebar.title('Early Warning System'); page=st.sidebar.radio('Navigate',pages,key='page'); st.sidebar.caption('Local academic prototype')
+    pages=['Dashboard','Individual Assessment','Batch Analysis','About Project']; st.sidebar.title('Early Warning System'); page=st.sidebar.radio('Navigate',pages,key='page_selector'); st.sidebar.caption('Local academic prototype')
     if page=='Dashboard': dashboard()
     elif page=='Individual Assessment': individual_assessment(artifact)
     elif page=='Batch Analysis': batch_analysis(artifact)
