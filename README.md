@@ -1,6 +1,6 @@
 # Student Dropout Early Warning System Using Machine Learning
 
-This academic project estimates elevated risk of later university dropout after a student completes Semester 1. It supports timely review—not automatic decisions or certainty about a student's future.
+This academic project estimates elevated risk of later university dropout after a completed semester. It supports timely review—not automatic decisions or certainty about a student's future.
 
 ## Prediction point and target
 
@@ -37,13 +37,13 @@ Dropout prevalence is 39.15%.
 8. Courses Enrolled
 9. Evaluations Completed
 10. Courses Passed
-11. Semester-1 GPA (0.00–4.00)
+11. Semester GPA (0.00–4.00)
 
 Admission Grade was removed. The source Previous Qualification Grade is normalized during training as `source grade / 190 × 5` and renamed `previous_academic_gpa_normalized`. Its exact observed support is 2.50–5.00, which becomes the website's HSC / Equivalent GPA range. This is a numerical scale normalization only; it does not claim academic equivalence between national grading systems.
 
 Occupation codes are presented as documented readable labels. Semester pass rate is calculated inside the pipeline as `Courses Passed / Courses Enrolled`; zero enrolled courses produces a rate of zero.
 
-For interface compatibility, the visible Semester-1 GPA is converted internally using `source semester grade = semester GPA / 4 × 18.875`. The user never enters or sees the source 0–18.875 value. This numerical normalization does not imply equivalence between Portuguese and Bangladeshi grading systems.
+For interface compatibility, the visible Semester GPA is converted internally using `source semester grade = semester GPA / 4 × 18.875`. The user never enters or sees the source 0–18.875 value. This numerical normalization does not imply equivalence between Portuguese and Bangladeshi grading systems.
 
 ## Model development and results
 
@@ -66,7 +66,19 @@ Confusion matrix: 387 correctly identified graduates, 55 false early warnings, 3
 
 ## Streamlit interface
 
-The four pages are Home, Assess Dropout Risk, Model Performance, and About & Methodology. The assessment page loads the frozen artifact from `models/uci_sem1/`, calls `predict_proba()`, reads the Dropout=1 probability, and applies the saved threshold. It never retrains.
+The three pages are Home, Assess Dropout Risk, and About Project. The assessment page loads the frozen artifact from `models/uci_sem1/`, calls `predict_proba()`, reads the Dropout=1 probability, and applies the saved threshold. It never retrains.
+
+
+The source model was trained using first-semester academic performance. The prototype interface presents these fields as the student's most recently completed semester for easier local data collection. Local validation is required before operational use across different semester stages.
+
+## Local data collection plan
+
+A future Google Form should collect the same 11 user fields shown above, plus these research-only fields:
+
+- Current Semester / Academic Year
+- Anonymous Follow-Up ID
+
+Unlabeled form responses cannot immediately retrain a supervised model. Future actual outcomes must be linked to each response through the anonymous ID before the data can support local validation, recalibration, or retraining.
 
 ## Leakage controls
 
