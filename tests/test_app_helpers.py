@@ -1,21 +1,23 @@
 """Active Semester-1 website safety and inference tests."""
 import json
+import hashlib
 from pathlib import Path
 import joblib
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 from app import (FORM_FIELDS,METADATA_PATH,MODEL_PATH,OCCUPATIONS,OCCUPATION_BY_LABEL,
-    RESULTS_PATH,THRESHOLD,dropout_probability,make_input_frame,risk_label,
+    THRESHOLD,dropout_probability,make_input_frame,risk_label,
     semester_gpa_to_source_grade,validate_inputs)
 from src.uci_sem1_features import normalize_previous_grade
 
 ROOT=Path(__file__).resolve().parents[1]
+RESULTS_PATH=ROOT/'reports'/'uci_sem1'/'training_results_11_input.json'
 
 def sample_values(**overrides):
     values={'previous_academic_gpa_normalized':3.5,'Age at enrollment':19,"Mother's occupation":9,"Father's occupation":9,'Scholarship holder':0,'Debtor':0,'Tuition fees up to date':1,'Curricular units 1st sem (enrolled)':6,'Curricular units 1st sem (evaluations)':8,'Curricular units 1st sem (approved)':5,'Curricular units 1st sem (grade)':12.0}
     values.update(overrides); return values
 
-def test_exactly_twelve_fields_and_no_banned_inputs():
+def test_exactly_eleven_fields_and_no_banned_inputs():
     assert len(FORM_FIELDS)==11
     banned=['2nd sem','Application mode','Application order','Course','Nacionality','Unemployment rate','Inflation rate','GDP',"Mother's qualification","Father's qualification",'Admission grade','Previous qualification (grade)']
     assert all(not any(term.lower() in field.lower() for term in banned) for field in FORM_FIELDS)
@@ -40,6 +42,9 @@ def test_saved_artifact_probability_and_locked_threshold():
     assert 0<=probability<=1
     assert artifact['threshold']==metadata['threshold']==THRESHOLD==0.48
 
+def test_frozen_model_artifact_is_unchanged():
+    assert hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()=='c228cccae5d4171afa74d9eae23e0cc88547bf9602fb6ce72626f2335b7596c1'
+
 def test_both_result_paths():
     assert risk_label(0.479999)=='Lower Estimated Risk'
     assert risk_label(0.48)=='Elevated Estimated Risk'
@@ -60,18 +65,23 @@ def test_active_source_has_no_old_profile_ui_or_deterministic_claim():
     source=(ROOT/'app.py').read_text(encoding='utf-8').lower()
     banned=['k-means','student profile explorer','profile 1','profile 2','silhouette','davies-bouldin','clustering pca','will drop out','admission grade']
     assert all(term not in source for term in banned)
+    assert 'st.image(' not in source and 'st.pyplot(' not in source
 
-def test_all_pages_render_without_exceptions_and_form_has_12_widgets():
+def test_three_pages_render_without_exceptions_and_form_has_11_widgets():
     app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
-    expected={'Home':'Student Dropout Early Warning System','Assess Dropout Risk':'Assess Dropout Risk','Model Performance':'Model Performance','About & Methodology':'About & Methodology'}
+    assert list(app.radio[0].options)==['Home','Assess Dropout Risk','About Project']
+    expected={'Home':'Student Dropout Early Warning System','Assess Dropout Risk':'Assess Dropout Risk','About Project':'About Project'}
     for page,title in expected.items():
         app.radio[0].set_value(page).run(); assert not app.exception; assert title in [item.value for item in app.title]
     app.radio[0].set_value('Assess Dropout Risk').run()
     assert len(app.number_input)+len(app.selectbox)==11
     gpa=next(item for item in app.number_input if item.label=='HSC / Equivalent GPA')
     assert gpa.min==2.5 and gpa.max==5.0 and gpa.step==0.01
-    semester_gpa=next(item for item in app.number_input if item.label=='Semester-1 GPA')
+    semester_gpa=next(item for item in app.number_input if item.label=='Semester GPA')
     assert semester_gpa.min==0.0 and semester_gpa.max==4.0 and semester_gpa.step==0.01
     semester_gpa.set_value(4.0); app.button[0].click().run()
     assert not app.exception
     assert not app.error
+    app.radio[0].set_value('About Project').run()
+    assert any('Anonymous Follow-Up ID' in item.value for item in app.markdown)
+    assert any('first-semester academic performance' in item.value for item in app.markdown)
